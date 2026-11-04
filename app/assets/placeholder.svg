@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Headphones">
+  <g fill="none" stroke="#8b97ad" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M52 148v-18a68 68 0 0 1 136 0v18"/>
+    <rect x="34" y="138" width="36" height="56" rx="15" fill="#eef2f9"/>
+    <rect x="170" y="138" width="36" height="56" rx="15" fill="#eef2f9"/>
+  </g>
+</svg>
