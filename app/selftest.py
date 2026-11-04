@@ -9,6 +9,7 @@ the normalized state. Run this after touching any protocol code.
 """
 import ctypes
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -138,6 +139,48 @@ def _battery_stages():
     return ok and not srv.ALERTS
 
 
+def _photo_table():
+    """Parse PHOTO_VARIANTS out of app.js: {model: {suffix: render file}}."""
+    js = open(os.path.join(srv.ROOT, "app.js"), encoding="utf-8").read()
+    if "const PHOTO_VARIANTS = {" not in js:
+        return {}
+    block = js.split("const PHOTO_VARIANTS = {", 1)[1].split("};", 1)[0]
+    table = {}
+    for m in re.finditer(r"(\w+)\s*:\s*\{([^}]*)\}", block):
+        table[m.group(1)] = dict(re.findall(r"(\w+)\s*:\s*'([\w.-]+)'", m.group(2)))
+    return table
+
+
+def _photo_table_matches_assets():
+    """Every colour the panel can name must map to a render that ships.
+
+    This is the check that catches the realistic failure: a new colourway gets
+    a file but nobody updates the table (or the reverse), and the panel silently
+    shows the default render for one colour.
+    """
+    table = _photo_table()
+    if not table:
+        return False
+    assets = set(os.listdir(os.path.join(srv.ROOT, "assets")))
+    suffixes = set(v[2] for v in lb.MODEL_COLORS.values() if v[2])
+    for dev, mapping in table.items():
+        if dev + ".png" not in assets:          # the default render
+            return False
+        for sfx, name in mapping.items():
+            if sfx not in suffixes:             # typo in a key
+                return False
+            if name + ".png" not in assets:     # render missing
+                return False
+    return True
+
+
+def _table_suffixes_only():
+    table = _photo_table()
+    suffixes = set(v[2] for v in lb.MODEL_COLORS.values() if v[2])
+    return bool(table) and all(sfx in suffixes
+                               for m in table.values() for sfx in m)
+
+
 def _theme_follows():
     js = open(os.path.join(srv.ROOT, "app.js"), encoding="utf-8").read()
     return ("addEventListener('change'" in js and "themeExplicit" in js
@@ -247,8 +290,24 @@ def main():
          srv.demo_state("xm4")["info"]["color"] is None),
         ("placeholder artwork present",
          os.path.isfile(os.path.join(srv.ROOT, "assets", "placeholder.svg"))),
-        ("asset whitelist covers shipped files",
-         {"placeholder.svg", "sony-logo.svg"} <= srv.ASSET_OK),
+        ("asset gate accepts the placeholder", srv.asset_allowed("placeholder.svg")),
+        ("asset gate rejects traversal", not srv.asset_allowed("../server.py")),
+        # One render per colourway, named after the ModelColor suffix the
+        # headset reports in 04 03 (see make_cloud_assets.py).
+        # No Sony renders are shipped here, so only the table itself is
+        # checked: every suffix must be a real ModelColor and the models must
+        # be the two this project supports.
+        ("colour table covers both models", len(_photo_table()) == 2),
+        ("colour suffixes are real ModelColor values",
+         _table_suffixes_only()),
+        # This checkout ships sony-logo.svg but no Sony product renders.
+        ("asset gate accepts a shipped image", srv.asset_allowed("sony-logo.svg")),
+        ("asset gate rejects traversal", not srv.asset_allowed("../server.py")),
+        ("asset gate rejects non-images", not srv.asset_allowed("config.json")),
+        ("black maps to the default xm4 render",
+         _photo_table().get("xm4", {}).get("b") == "xm4"),
+        ("white maps to the white LinkBuds render",
+         _photo_table().get("ls900n", {}).get("w") == "ls900n_w"),
         # Tray menu is owner-drawn and must not expose a demo entry any more.
         ("tray menu has 7 labelled items", len(_menu_labels()) == 7),
         ("tray menu has no demo entry",

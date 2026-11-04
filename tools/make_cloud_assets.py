@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 """Build the per-model product images for the control panel.
 
-Source: Sony's own online store CDN (model-specific product renders):
+Source: Sony's own online store CDN (model-specific product renders), one per
+colourway. The suffix of each file is the ModelColor suffix the headset itself
+reports in `04 03 -> 05 03 <series> <color>`, so the panel can pick the right
+render from the colour it decoded:
 
-  https://store.sony.com.tw/resource/product_files/WH-1000XM4-B/WH-1000XM4-B_pi.jpg
-  https://store.sony.com.tw/resource/product_files/WF-LS900N-L/WF-LS900N-L_pi.jpg
-  https://store.sony.com.tw/resource/product_files/WF-LS900N-W/WF-LS900N-W_pi.jpg
+  WH-1000XM4-B (黑)  WH-1000XM4-S (铂金银)  WH-1000XM4-L (深夜蓝)  WH-1000XM4-W (白)
+  WF-LS900N-B (黑)   WF-LS900N-W (白)        WF-LS900N-L (地球蓝)   WF-LS900N-C (米色)
 
 The App's own CloudModelInfo image service needs an authenticated GraphQL
 call, so these official per-model renders are used instead. These are photo
@@ -18,21 +20,36 @@ Run: python make_cloud_assets.py
 import os
 import urllib.request
 
+import cv2
 import numpy as np
 from PIL import Image, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.join(HERE, "cloudimg")
-ASSETS = os.path.join(HERE, "app", "assets")
+CACHE = os.path.join(HERE, "..", "cloudimg")
+ASSETS = os.path.join(HERE, "..", "app", "assets")
 
-SOURCES = {
-    "xm4": ("https://store.sony.com.tw/resource/product_files/"
-            "WH-1000XM4-B/WH-1000XM4-B_pi.jpg", "xm4_src.jpg"),
-    "ls900n": ("https://store.sony.com.tw/resource/product_files/"
-               "WF-LS900N-L/WF-LS900N-L_pi.jpg", "ls900n_src.jpg"),
-    "ls900n_w": ("https://store.sony.com.tw/resource/product_files/"
-                 "WF-LS900N-W/WF-LS900N-W_pi.jpg", "ls900n_w_src.jpg"),
-}
+BASE = "https://store.sony.com.tw/resource/product_files/%s/%s_pi.jpg"
+
+# (output key, Sony SKU, cut-out style)
+#   key   -> luminance keying, for the dark bodies
+#   light -> border flood-fill, for white/silver/cream bodies that luminance
+#            keying would erase
+#
+# The bare model name (xm4, ls900n) is the colour-agnostic default used when a
+# headset reports a colour we have no render for.
+# The bare name doubles as the default for that model, so only the colourways
+# that differ from it get their own file (app.js maps BLACK -> xm4.png and
+# earth blue -> ls900n.png instead of shipping byte-identical copies).
+VARIANTS = [
+    ("xm4",          "WH-1000XM4-B", "key"),      # 黑，也是默认图
+    ("xm4_s",        "WH-1000XM4-S", "light"),    # 铂金银
+    ("xm4_l",        "WH-1000XM4-L", "key"),      # 深夜蓝
+    ("xm4_w",        "WH-1000XM4-W", "light"),    # 白
+    ("ls900n",       "WF-LS900N-L",  "key"),      # 地球蓝，也是默认图
+    ("ls900n_b",     "WF-LS900N-B",  "key"),      # 黑
+    ("ls900n_w",     "WF-LS900N-W",  "light"),    # 白
+    ("ls900n_cream", "WF-LS900N-C",  "light"),    # 米色
+]
 
 
 def fetch(url, path):
@@ -81,43 +98,49 @@ def to_transparent(src, dst, size=384, pad=0.07):
     return os.path.getsize(dst)
 
 
-def to_transparent_white(src, dst, size=384, pad=0.06, feather=0.13,
-                         threshold=6):
-    """White product on a white studio background.
+def to_transparent_light(src, dst, size=384, pad=0.06, feather=1.1,
+                         thresh_bg=244):
+    """White / silver / cream bodies on the white studio background.
 
-    Luminance keying would erase the earbuds along with the background, so the
-    render is kept intact: crop to the product's own bounding box (found from
-    the soft grey outline, not from pure-white pixels), then feather only the
-    four edges into alpha. The control panel puts products on a light plinth,
-    so the remaining white studio background melts into it seamlessly.
+    Two earlier attempts failed here. Luminance keying erases the body along
+    with the background, and feathering only the edges leaves a white
+    rectangle that is plainly visible on the panel's plinth. So the background
+    is instead identified structurally: flood-fill the near-white area from the
+    four borders. Studio white touching an edge disappears, while white
+    highlights *enclosed* by the product outline (ear-pad rims, the inside of
+    the headband) stay opaque, which is what keeps a white headset looking like
+    a headset.
     """
     im = Image.open(src).convert("RGB")
-    lum = np.asarray(im).mean(axis=2)
-    diff = Image.fromarray((255 - lum).astype(np.uint8)).filter(
-        ImageFilter.GaussianBlur(1.2))
-    mask = np.asarray(diff) > threshold
-    ys, xs = np.where(mask)
-    if len(xs):
-        x0, x1 = int(xs.min()), int(xs.max()) + 1
-        y0, y1 = int(ys.min()), int(ys.max()) + 1
-        mx, my = int((x1 - x0) * 0.08), int((y1 - y0) * 0.14)
-        im = im.crop((max(0, x0 - mx), max(0, y0 - my),
-                      min(im.width, x1 + mx), min(im.height, y1 + my)))
-    im = im.convert("RGBA")
-    w, h = im.size
+    a = np.asarray(im).astype(np.int16)
+    mn, mx = a.min(axis=2), a.max(axis=2)
+    bgish = ((mn > thresh_bg) & ((mx - mn) < 14)).astype(np.uint8)
+
+    work = bgish.copy()
+    h, w = work.shape
+    scratch = np.zeros((h + 2, w + 2), np.uint8)   # cv2 requires the halo
+    for seed in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        if work[seed[1], seed[0]] == 1:
+            cv2.floodFill(work, scratch, seed, 2, loDiff=0, upDiff=0,
+                          flags=4 | cv2.FLOODFILL_FIXED_RANGE)
+
+    alpha = np.where(work == 2, 0, 255).astype(np.uint8)
+    alpha = np.asarray(Image.fromarray(alpha, "L").filter(
+        ImageFilter.GaussianBlur(feather)))
+    out = Image.fromarray(np.dstack([np.asarray(im), alpha]), "RGBA")
+
+    solid = Image.fromarray(alpha, "L").point(lambda v: 255 if v > 8 else 0)
+    box = solid.getbbox()
+    if box:
+        out = out.crop(box)
+    w, h = out.size
     scale = size * (1 - 2 * pad) / max(w, h)
-    im = im.resize((max(1, int(w * scale)), max(1, int(h * scale))),
-                   Image.LANCZOS)
-    im = _sharpen(im)
-    W, H = im.size
-    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
-    dx = np.minimum(xx, W - 1 - xx) / (W * feather)
-    dy = np.minimum(yy, H - 1 - yy) / (H * feather)
-    t = np.clip(np.minimum(dx, dy), 0, 1)
-    alpha = (t * t * (3 - 2 * t) * 255).astype(np.uint8)   # smoothstep
-    im.putalpha(Image.fromarray(alpha, "L"))
+    out = out.resize((max(1, int(w * scale)), max(1, int(h * scale))),
+                     Image.LANCZOS)
+    out = _sharpen(out)
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    canvas.alpha_composite(im, ((size - W) // 2, (size - H) // 2))
+    canvas.alpha_composite(out, ((size - out.width) // 2,
+                                 (size - out.height) // 2))
     canvas.save(dst)
     return os.path.getsize(dst)
 
@@ -125,14 +148,18 @@ def to_transparent_white(src, dst, size=384, pad=0.06, feather=0.13,
 def main():
     os.makedirs(CACHE, exist_ok=True)
     os.makedirs(ASSETS, exist_ok=True)
-    for key, (url, name) in SOURCES.items():
-        src = os.path.join(CACHE, name)
+    total = 0
+    for key, sku, style in VARIANTS:
+        url = BASE % (sku, sku)
+        src = os.path.join(CACHE, key + "_src.jpg")
         fetch(url, src)
         dst = os.path.join(ASSETS, key + ".png")
-        convert = to_transparent_white if key.endswith("_w") else to_transparent
+        convert = to_transparent_light if style == "light" else to_transparent
         n = convert(src, dst)
-        print("%-9s <- %-30s -> %s.png (%d bytes)" % (
-            key, url.rsplit("/", 1)[-1], key, n))
+        total += n
+        print("%-13s %-5s <- %-14s -> %s.png (%6d B)" % (
+            key, style, sku, key, n))
+    print("%d files, %.0f KB total" % (len(VARIANTS), total / 1024))
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ so every operation is serialized under one lock and one persistent connection.
 import copy
 import json
 import os
+import re
 import socketserver
 import sys
 import threading
@@ -990,9 +991,17 @@ MIME = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
         ".js": "application/javascript; charset=utf-8",
         ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp",
         ".ico": "image/x-icon"}
-ASSET_OK = {"xm4.svg", "ls900n.svg", "xm4.png", "ls900n.png",
-            "ls900n_w.png", "sony-logo.svg", "app-icon.ico",
-            "placeholder.svg"}
+# Product artwork is added per colourway (xm4_b, xm4_s, ls900n_cream, ...), so a
+# hand-maintained whitelist would need editing for every new render. Accept any
+# plain image file name that actually sits in app/assets: the name is validated
+# (no separators, no traversal) and the file must exist.
+_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.(?:png|svg|webp|ico)\Z")
+
+
+def asset_allowed(name):
+    if not _ASSET_NAME.match(name):
+        return False
+    return os.path.isfile(os.path.join(ROOT, "assets", name))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1014,7 +1023,7 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def _file(self, name):
-        if name.startswith("assets/") and name.split("/")[-1] not in ASSET_OK:
+        if name.startswith("assets/") and not asset_allowed(name.split("/")[-1]):
             self.send_error(404)
             return
         path = os.path.join(ROOT, name)
@@ -1045,7 +1054,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._file(f)
             return
-        if p.startswith("/assets/") and p.rsplit("/", 1)[-1] in ASSET_OK:
+        if p.startswith("/assets/") and asset_allowed(p.rsplit("/", 1)[-1]):
             self._file("assets/" + p.rsplit("/", 1)[-1])
             return
         if p == "/api/context":

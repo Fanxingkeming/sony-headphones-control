@@ -90,10 +90,26 @@ function progress(on){
   if (grid) grid.classList.toggle('loading', !!on);
 }
 
+/* ModelColor suffix -> render file. Keys are the suffixes the headset reports
+   in 04 03. No Sony artwork is redistributed with this repository: drop your
+   own renders into app/assets/ under these names and colour detection starts
+   working immediately. Anything missing falls back to <model>.svg and then to
+   the neutral placeholder we do ship. */
+const PHOTO_VARIANTS = {
+  xm4:    { b: 'xm4', s: 'xm4_s', l: 'xm4_l', w: 'xm4_w' },
+  ls900n: { l: 'ls900n', b: 'ls900n_b', w: 'ls900n_w', cream: 'ls900n_cream' },
+};
+
 /* Warm the browser cache for both headsets so switching does not flash. */
 function preloadPhotos(){
-  ['xm4', 'ls900n', 'ls900n_w'].forEach(id => {
-    ['.png', '.svg'].forEach(ext => { const im = new Image(); im.src = '/assets/' + id + ext; });
+  Object.keys(PHOTO_VARIANTS).forEach(id => {
+    const names = [id].concat(Object.values(PHOTO_VARIANTS[id]));
+    [...new Set(names)].forEach(n => {
+      const im = new Image();
+      im.src = '/assets/' + n + '.png';
+    });
+    const svg = new Image();
+    svg.src = '/assets/' + id + '.svg';
   });
 }
 let toastTimer;
@@ -155,26 +171,32 @@ function renderDevice(ctx){
   setPhoto(device, ctx.color);
 }
 
+function photoCandidates(id, color){
+  // The headset reports its own ModelColor in 04 03; map it to the matching
+  // render. A colourway we have no render for is probed as <id>_<suffix>.png,
+  // then everything falls back to the default render, the traced SVG and
+  // finally the neutral placeholder.
+  const table = PHOTO_VARIANTS[id] || {};
+  const sfx = color && color.suffix;
+  const list = [];
+  const variant = sfx ? (table[sfx] || (id + '_' + sfx)) : null;
+  if (variant) list.push('/assets/' + variant + '.png');
+  if (list.indexOf('/assets/' + id + '.png') < 0) list.push('/assets/' + id + '.png');
+  list.push('/assets/' + id + '.svg', '/assets/placeholder.svg');
+  return list;
+}
+
 function setPhoto(id, color){
-  // No Sony artwork is redistributed with this repository. Drop your own
-  // render into app/assets/ under these names and it is picked up:
-  //   xm4.png / ls900n.png / ls900n_w.png (or the .svg variants)
-  // Otherwise the colour-matched file, then the model SVG, then the neutral
-  // placeholder we do ship are tried in order.
   const img = $('#devPhoto');
-  img.classList.remove('hidden');
-  let file = id + '.png';
-  if (id === 'ls900n' && color && color.suffix === 'w') file = 'ls900n_w.png';
-  const candidates = ['/assets/' + file,
-                      '/assets/' + id + '.svg',
-                      '/assets/placeholder.svg'];
+  const cands = photoCandidates(id, color);
   let i = 0;
+  img.classList.remove('hidden');
   img.onerror = () => {
     i += 1;
-    if (i < candidates.length) img.src = candidates[i];
+    if (i < cands.length) img.src = cands[i];
     else img.classList.add('hidden');
   };
-  img.src = candidates[0];
+  img.src = cands[0];
 }
 
 async function loadContext(force, quiet){

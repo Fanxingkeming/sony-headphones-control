@@ -140,13 +140,23 @@ python tools/sdp_probe.py                          # 探测 RFCOMM 通道
 - 固件文件
 
 界面上的机型图片因此会退化为一个中性的占位图形。想显示真机图片，把自己的图片放到
-`app/assets/` 下即可（会自动优先使用）：
+`app/assets/` 下即可。文件名按耳机自己上报的颜色（`04 03` 里的 `ModelColor`）来取，
+所以同一副耳机换配色会自动换图：
 
 ```
-app/assets/xm4.png         # WH-1000XM4
-app/assets/ls900n.png      # LinkBuds S（默认色）
-app/assets/ls900n_w.png    # LinkBuds S 白色
+app/assets/xm4.png          # WH-1000XM4，也是黑色款
+app/assets/xm4_s.png        # 铂金银   (ModelColor.SILVER)
+app/assets/xm4_l.png        # 深夜蓝   (ModelColor.BLUE)
+app/assets/xm4_w.png        # 白       (ModelColor.WHITE)
+app/assets/ls900n.png       # LinkBuds S，也是地球蓝款
+app/assets/ls900n_b.png     # 黑
+app/assets/ls900n_w.png     # 白
+app/assets/ls900n_cream.png # 米色     (ModelColor.CREAM)
 ```
+
+查不到对应配色的文件时会依次回退：默认机型图 → `app/assets/<机型>.svg` → 内置占位图。
+颜色与文件名的映射表在 `app/app.js` 的 `PHOTO_VARIANTS`，`selftest.py` 会交叉检查
+表里的每一项都有对应文件，改漏了会直接报错。
 
 `tools/make_assets.py`、`tools/make_brand_assets.py`、`tools/make_cloud_assets.py`
 是本地生成这些素材的脚本，需要你自备 Sound Connect APK；**它们生成的图片版权仍归 Sony，仅限个人使用**。
