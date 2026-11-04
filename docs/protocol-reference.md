@@ -370,6 +370,33 @@ python tools/linkbuds.py eq off|bass|vocal|...
 `DeviceInfoType`：01 型号、02 固件、03 系列与颜色、04 使用指南。
 （v2 没有 v1 那种 `04 <type>` 的其他分支，只有这四种。）
 
+**v1 同样实现了这组指令**（2026-11 实测，WH-1000XM4 / 2.5.0）：
+
+```
+04 01  ->  05 01 0a "WH-1000XM4"     ~200 ms
+04 02  ->  05 02 05 "2.5.0"          ~96 ms
+04 03  ->  05 03 30 01               ~98 ms    series=PREMIUM color=BLACK
+04 04  ->  05 04 04 30 50 40 60      ~52 ms
+```
+
+也就是说 `05 03` 的 `<series>` 字节两代都有（libmdr 的 `ProtocolV1T1.hpp` 同样把
+`ModelSeries series` 放在偏移 0x2），**不存在「v1 只有颜色」的 3 字节形式**。
+早期文档里的这个假设是错的，已在 `tools/linkbuds.py` 中更正。
+
+`ModelSeries`（取自 libmdr；v2 另有四个取值：0x11 `ULT_POWER_SOUND`、
+0x70 `NECKBAND`、0x80 `LINKPOD`、0x90 `GAMING`）：
+
+| 值 | 枚举 | 值 | 枚举 |
+|---|---|---|---|
+| 0x00 | NO_SERIES | 0x40 | SPORTS |
+| 0x10 | EXTRA_BASS | 0x50 | CASUAL |
+| 0x20 | HEAR | 0x60 | LINK_BUDS |
+| 0x30 | PREMIUM | 0xFF | OUT_OF_RANGE |
+
+`ModelColor`：0x01 BLACK、0x02 WHITE、0x03 SILVER、0x04 RED、0x05 BLUE、
+0x06 PINK、0x07 YELLOW、0x08 GREEN、0x09 GRAY、0x0A GOLD、0x0B CREAM、
+0x0C ORANGE、0x0D BROWN、0x0E VIOLET；0x11–0x1E 是同一批颜色的 `_I` 变体。
+
 ### 12.9 SYSTEM 族：智能对话与按键分配
 
 v2 的 SYSTEM 参数走 `F0`（能力）/ `F2`（状态）/ `F6`（参数）/ `F8`（写参数），
