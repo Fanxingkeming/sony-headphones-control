@@ -74,6 +74,8 @@ Chinese-only; the interface chrome is translated.
 - 发布的 exe **不包含 Sony 的产品渲染图与 Sound Connect 应用图标**（版权原因，见
   「仓库里不包含什么」），界面使用内嵌线稿图与程序化图标；想看真机图，把图片放进
   exe 旁边的 `assets` 文件夹即可，无需重新构建
+- 想直接用带官方素材的版本：[`full-version/`](full-version/) 文件夹里有
+  `SonyHeadphonesControl-full.exe`（仅供个人使用，版权说明见该文件夹的 README）
 - 文件未签名，首次运行 SmartScreen 会拦一次，点「更多信息 → 仍要运行」
 
 ## 快速开始
@@ -202,12 +204,16 @@ python tools/sdp_probe.py                          # 探测 RFCOMM 通道
 
 ## 仓库里不包含什么
 
-为了不重新分发他人的版权素材，以下内容**刻意没有放进仓库**：
+为了不重新分发他人的版权素材，**源码与官方发布包**刻意不包含：
 
 - Sony 官方产品图、Sound Connect 应用图标、APK 内提取的图片（版权归 Sony）
 - 任何真机抓包文件（`btsnoop` 等，含设备地址）
 - 任何真实蓝牙 MAC 地址
 - 固件文件
+
+唯一的例外是 [`full-version/`](full-version/) 文件夹：那里提供一个内嵌官方渲染图与
+应用图标的完整版 exe，方便不想自己配素材的用户。这些素材版权归 Sony，**仅供个人
+使用**，正式的 Releases 发布包与源码树仍然保持干净。
 
 界面上的机型图片因此会退化为一个中性的占位图形。想显示真机图片，把自己的图片放到
 `app/assets/` 下即可。文件名按耳机自己上报的颜色（`04 03` 里的 `ModelColor`）来取，

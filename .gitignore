@@ -5,6 +5,9 @@ dist/
 *.exe
 *.log
 
+# full-version/ ships the bundled-artwork exe on purpose
+!full-version/*.exe
+
 # local state (contains the user's headset MAC)
 app/config.json
 app/prefs.json
