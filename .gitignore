@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.exe
+*.log
+
+# local state (contains the user's headset MAC)
+app/config.json
+app/prefs.json
+app/port.json
+
+# generated PE icon
+app/icon.ico
+app/assets/app-icon.ico
+
+# user-supplied device artwork: Sony copyright, never commit
+app/assets/*.png
