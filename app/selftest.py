@@ -164,7 +164,7 @@ def _photo_table_matches_assets():
     assets = set(os.listdir(os.path.join(srv.ROOT, "assets")))
     suffixes = set(v[2] for v in lb.MODEL_COLORS.values() if v[2])
     def shipped(base):
-        return (base + ".webp") in assets or (base + ".png") in assets
+        return (base + ".webp") in assets
 
     for dev, mapping in table.items():
         if not shipped(dev):                    # the default render
@@ -210,6 +210,32 @@ def _log_stamped():
                 and head[13] == ":" and text.endswith("hello\n"))
     finally:
         appmain.tray.data_dir = orig
+
+
+def _battery_tick_light():
+    """The 10-minute watch must send the battery command only.
+
+    A full status snapshot here would hold the session lock for over a second
+    and collide with whatever the panel is doing.
+    """
+    sent = []
+
+    class Fake:
+        def request(self, payload, wait=1.0, retries=0):
+            sent.append(payload)
+            return bytes([0x11, 0x00, 55])
+
+    fake = Fake()
+    prev = (srv.CURRENT.get("key"), srv.SESSION.client, srv.SESSION.key)
+    srv.CURRENT["key"] = "xm4"
+    srv.SESSION.client, srv.SESSION.key = fake, "xm4"
+    srv.BATTERY_WATCH.update({"key": "xm4", "stage": 0})
+    del srv.ALERTS[:]
+    try:
+        level = srv.battery_tick()
+        return level == 55 and sent == [b"\x10\x00"]
+    finally:
+        srv.CURRENT["key"], srv.SESSION.client, srv.SESSION.key = prev
 
 
 def _table_suffixes_only():
@@ -381,6 +407,7 @@ def main():
         ("v1 model name parsed from 04 01", _v1_model_name()),
         ("v2 skips the extra model round trip", _v2_skips_model_read()),
         ("log lines carry a timestamp", _log_stamped()),
+        ("battery watch sends one command", _battery_tick_light()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)

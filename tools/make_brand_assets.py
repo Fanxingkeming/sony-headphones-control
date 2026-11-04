@@ -17,6 +17,7 @@ Sources:
 
 Run: python make_brand_assets.py
 """
+import io
 import os
 import re
 import struct
@@ -27,10 +28,10 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-APP = os.path.join(HERE, "app")
+APP = os.path.join(HERE, "..", "app")
 ASSETS = os.path.join(APP, "assets")
-CACHE = os.path.join(HERE, "apk_assets")
-CLOUD = os.path.join(HERE, "cloudimg")
+CACHE = os.path.join(HERE, "..", "apk_assets")
+CLOUD = os.path.join(HERE, "..", "cloudimg")
 
 APK = os.environ.get(
     "SOUND_CONNECT_APK", r"E:/Downloads/sound_connect_v13.3.0.apk")
@@ -87,13 +88,30 @@ def dib_from_image(im):
     return hdr + bytes(xor) + bytes(and_mask)
 
 
+# Windows Vista and later read PNG-compressed .ico entries. A 256px DIB alone
+# is ~270 KB of raw pixels inside the exe; as PNG it is ~40 KB, and nothing
+# changes on screen. Small sizes stay DIB because they are already tiny and
+# every shell version reads them.
+PNG_MIN_SIZE = 128
+
+
+def png_bytes(im):
+    buf = io.BytesIO()
+    im.save(buf, "PNG", optimize=True)
+    return buf.getvalue()
+
+
+def icon_entry(size, src):
+    im = src.resize((size, size), Image.LANCZOS)
+    return png_bytes(im) if size >= PNG_MIN_SIZE else dib_from_image(im)
+
+
 def make_icon():
     src = master_icon()
     # keep a high-res preview outside the packaged assets
     src.resize((512, 512), Image.LANCZOS).save(
         os.path.join(CACHE, "app-icon-512.png"))
-    images = [(s, dib_from_image(src.resize((s, s), Image.LANCZOS)))
-              for s in ICO_SIZES]
+    images = [(s, icon_entry(s, src)) for s in ICO_SIZES]
     header = struct.pack("<HHH", 0, 1, len(images))
     offset = 6 + 16 * len(images)
     entries = b""
@@ -109,9 +127,9 @@ def make_icon():
     for p in outs:
         with open(p, "wb") as f:
             f.write(data)
-    print("app icon  %dx%d master -> %s (%d bytes, %d sizes: %s)" % (
+    print("app icon  %dx%d master -> %s (%d bytes, %d sizes: %s; png >= %d)" % (
         src.width, src.height, ", ".join(os.path.basename(p) for p in outs),
-        len(data), len(ICO_SIZES), "/".join(map(str, ICO_SIZES))))
+        len(data), len(ICO_SIZES), "/".join(map(str, ICO_SIZES)), PNG_MIN_SIZE))
 
 
 def make_sony_svg():

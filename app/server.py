@@ -748,7 +748,11 @@ def read_status(key, c):
 
 
 def battery_tick():
-    """Refresh the battery on an already-open link, for the tray watch thread.
+    """Read *only* the battery over an already-open link.
+
+    The tray watch runs every 10 minutes; a full status snapshot would hold
+    SESSION.lock for ~1.4 s and collide with whatever the panel is doing at
+    that moment. One battery command is ~200 ms and touches nothing else.
 
     It deliberately never connects: an idle app must not keep waking the
     headset, and a connect attempt on a sleeping device blocks for seconds.
@@ -759,12 +763,18 @@ def battery_tick():
     with SESSION.lock:
         if SESSION.client is None:
             return None
+        c = SESSION.get(key)
         try:
-            st = read_status(key, SESSION.get(key))
+            if DEVICES[key]["protocol"] == "v2":
+                level = lb.read_battery(c).get("整体")
+            else:
+                r = c.request(b"\x10\x00", wait=1.0, retries=0)
+                level = r[2] if r and len(r) >= 3 else None
         except Exception:
             return None
-        STATUS_CACHE.update({"key": key, "at": time.monotonic(), "state": st})
-    return st.get("battery", {}).get("main")
+    if isinstance(level, int):
+        check_battery(key, {"battery": {"main": level}})
+    return level
 
 
 # ---------------------------------------------------------------------------

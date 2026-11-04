@@ -1,0 +1,30 @@
+name: selftest
+
+# The self-test is fully offline: it feeds canned protocol replies through the
+# parsers, so it needs no headset and no Bluetooth. What it does catch is drift
+# between the parts that must agree - the ModelColor table, the render files the
+# panel asks for, the device ids - which compiling alone never reveals.
+on:
+  push:
+  pull_request:
+
+jobs:
+  selftest:
+    # windows-latest on purpose: app/tray.py binds user32/shell32 through
+    # ctypes at import time, so the suite cannot even import on Linux.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Self-test
+        run: python app/selftest.py
+
+      - name: Python syntax
+        run: python -m compileall -q app tools
+
+      - name: JavaScript syntax
+        run: node --check app/app.js

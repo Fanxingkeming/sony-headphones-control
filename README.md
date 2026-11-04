@@ -1,5 +1,7 @@
 # Sony Headphones Control
 
+[![selftest](https://github.com/Fanxingkeming/sony-headphones-control/actions/workflows/selftest.yml/badge.svg)](https://github.com/Fanxingkeming/sony-headphones-control/actions/workflows/selftest.yml)
+
 在 Windows 上通过逆向得到的 **Sony MDR / Tandem 协议**，本地控制索尼耳机的单文件小工具。
 纯 Python 标准库实现（运行时不依赖任何第三方包），带系统托盘和本地 Web 控制面板。
 
@@ -25,6 +27,20 @@
 - **系统**：智能免摘（Speak-to-Chat）、取下暂停、触摸面板、自动断电、多点连接（读写）、左右耳按键分配
 - **颜色识别**：`04 03` 读取系列与机身颜色（如白色 `0x02`），据此选择对应的产品图
 - **其他**：明暗主题、原始帧日志、托盘菜单、单实例、开机自启
+
+## 界面
+
+<table>
+<tr>
+<td><img src="docs/screenshots/light.png" alt="亮色主题"></td>
+<td><img src="docs/screenshots/dark.png" alt="深色主题"></td>
+</tr>
+<tr><td align="center">亮色</td><td align="center">深色</td></tr>
+</table>
+
+截图里的耳机图形是内置的占位图（仓库不附带 Sony 官方素材，见下文「刻意没有放进仓库的内容」），
+界面上的蓝牙地址也是占位值。
+
 
 ## 快速开始
 
