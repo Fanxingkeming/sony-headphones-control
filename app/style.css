@@ -221,6 +221,25 @@ input[type=range]{accent-color:var(--primary);width:100%;cursor:pointer}
 .foot{text-align:center;color:var(--muted);font-size:11px;margin-top:14px;padding:0 20px}
 
 /* ---------- busy / toast ---------- */
+/* First paint must not be blocked by a full-screen overlay: the layout and the
+   device identity appear immediately, values fade in when the read completes. */
+.progress{
+  position:fixed;top:0;left:0;right:0;height:2px;z-index:70;pointer-events:none;
+  background:linear-gradient(90deg,transparent,var(--primary),transparent);
+  background-size:35% 100%;background-repeat:no-repeat;
+  animation:progress-slide 1.1s linear infinite;
+}
+@keyframes progress-slide{
+  from{background-position:-35% 0}
+  to{background-position:135% 0}
+}
+#grid.loading{pointer-events:none}
+#grid.loading .kv dd,
+#grid.loading #bat-main,
+#grid.loading #bat-detail,
+#grid.loading .battery-detail{opacity:.35}
+.dev-photo{transition:opacity .18s ease}
+
 .busy{
   position:fixed;inset:0;z-index:50;background:var(--busy);backdrop-filter:blur(1.5px);
   display:flex;align-items:center;justify-content:center;gap:10px;font-size:12px;font-weight:550;color:var(--ink2);

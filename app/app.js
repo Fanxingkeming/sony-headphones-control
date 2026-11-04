@@ -45,6 +45,23 @@ function busy(on, text){
   $('#busyText').textContent = text || '正在与设备通信…';
   $('#busy').classList.toggle('hidden', !on);
 }
+
+/* Cheap loading state: a 2 px bar plus dimmed values, so the page is readable
+   and scrollable while the radio is still answering. The full-screen overlay
+   is reserved for writes, where a stray click would be harmful. */
+function progress(on){
+  const bar = $('#progress');
+  if (bar) bar.classList.toggle('hidden', !on);
+  const grid = $('#grid');
+  if (grid) grid.classList.toggle('loading', !!on);
+}
+
+/* Warm the browser cache for both headsets so switching does not flash. */
+function preloadPhotos(){
+  ['xm4', 'ls900n', 'ls900n_w'].forEach(id => {
+    ['.png', '.svg'].forEach(ext => { const im = new Image(); im.src = '/assets/' + id + ext; });
+  });
+}
 let toastTimer;
 function toast(msg, bad){
   const t = $('#toast');
@@ -143,7 +160,7 @@ async function loadStatus(fresh){
   // queueing them only doubles the latency, so a second call is dropped.
   if (statusInFlight) return;
   statusInFlight = true;
-  busy(true, '正在连接设备（最多约 20 秒）…');
+  progress(true);
   try {
     const q = `device=${encodeURIComponent(device)}` + (fresh ? '&fresh=1' : '');
     const j = await api(`/api/status?${q}`, null, 25000);
@@ -159,6 +176,7 @@ async function loadStatus(fresh){
     toast(e.message, true);
   } finally {
     statusInFlight = false;
+    progress(false);
     busy(false);
     loadLog();
   }
@@ -342,7 +360,7 @@ function bind(){
   });
 
   $('#btnRefresh').onclick = async () => {
-    busy(true, '正在检测已连接的耳机…');
+    progress(true);
     try {
       try { await api('/api/disconnect', {}); } catch(e){}
       clearBanner();
@@ -351,7 +369,8 @@ function bind(){
       toast('状态已刷新');
     } catch(e) {
       toast(e.message, true);
-      busy(false);
+    } finally {
+      progress(false);
     }
   };
 
@@ -397,12 +416,13 @@ function bind(){
 
 (async function init(){
   bind();
-  busy(true, '正在检测已连接的耳机…');
+  preloadPhotos();
+  progress(true);
   try {
     await loadContext();
   } catch(e){
     banner('<b>后端未就绪。</b> ' + esc(e.message), true);
-    busy(false);
+    progress(false);
     return;
   }
   await loadStatus();
