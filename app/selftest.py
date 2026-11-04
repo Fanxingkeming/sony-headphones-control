@@ -163,15 +163,53 @@ def _photo_table_matches_assets():
         return False
     assets = set(os.listdir(os.path.join(srv.ROOT, "assets")))
     suffixes = set(v[2] for v in lb.MODEL_COLORS.values() if v[2])
+    def shipped(base):
+        return (base + ".webp") in assets or (base + ".png") in assets
+
     for dev, mapping in table.items():
-        if dev + ".png" not in assets:          # the default render
+        if not shipped(dev):                    # the default render
             return False
         for sfx, name in mapping.items():
             if sfx not in suffixes:             # typo in a key
                 return False
-            if name + ".png" not in assets:     # render missing
+            if not shipped(name):               # render missing
                 return False
     return True
+
+
+def _v1_model_name():
+    class FakeV1:
+        def request(self, payload, wait=1.0, retries=0):
+            assert payload == b"\x04\x01", payload
+            return b"\x05\x01\x0a" + b"WH-1000XM4"
+
+    return srv.read_device_model("xm4", FakeV1()) == "WH-1000XM4"
+
+
+def _v2_skips_model_read():
+    """v2 already reads the model inside read_status_v2, so the handshake must
+    not spend another round trip on it."""
+    class Boom:
+        def request(self, *a, **k):
+            raise AssertionError("must not be called")
+
+    return srv.read_device_model("ls900n", Boom()) is None
+
+
+def _log_stamped():
+    import tempfile
+    import appmain
+    d = tempfile.mkdtemp()
+    orig = appmain.tray.data_dir
+    appmain.tray.data_dir = lambda: d
+    try:
+        appmain.log("hello")
+        text = open(os.path.join(d, "app.log"), encoding="utf-8").read()
+        head = text[:19]
+        return (head[4] == "-" and head[7] == "-" and head[10] == " "
+                and head[13] == ":" and text.endswith("hello\n"))
+    finally:
+        appmain.tray.data_dir = orig
 
 
 def _table_suffixes_only():
@@ -288,19 +326,15 @@ def main():
          srv.demo_state("ls900n")["info"]["color"]["name"] == "白色"),
         ("v1 demo does not invent a colour",
          srv.demo_state("xm4")["info"]["color"] is None),
-        ("placeholder artwork present",
-         os.path.isfile(os.path.join(srv.ROOT, "assets", "placeholder.svg"))),
-        ("asset gate accepts the placeholder", srv.asset_allowed("placeholder.svg")),
-        ("asset gate rejects traversal", not srv.asset_allowed("../server.py")),
+        ("brand assets present",
+         all(os.path.isfile(os.path.join(srv.ROOT, "assets", f)) for f in
+             ("sony-logo.svg", "placeholder.svg"))),
         # One render per colourway, named after the ModelColor suffix the
         # headset reports in 04 03 (see make_cloud_assets.py).
-        # No Sony renders are shipped here, so only the table itself is
-        # checked: every suffix must be a real ModelColor and the models must
-        # be the two this project supports.
+        # No Sony renders ship here, so only the table itself is checked.
         ("colour table covers both models", len(_photo_table()) == 2),
         ("colour suffixes are real ModelColor values",
          _table_suffixes_only()),
-        # This checkout ships sony-logo.svg but no Sony product renders.
         ("asset gate accepts a shipped image", srv.asset_allowed("sony-logo.svg")),
         ("asset gate rejects traversal", not srv.asset_allowed("../server.py")),
         ("asset gate rejects non-images", not srv.asset_allowed("config.json")),
@@ -344,6 +378,9 @@ def main():
         ("log rotates past the size cap", _rotate_ok()),
         # Theme keeps following the OS until the user picks one explicitly.
         ("theme listens for OS changes", _theme_follows()),
+        ("v1 model name parsed from 04 01", _v1_model_name()),
+        ("v2 skips the extra model round trip", _v2_skips_model_read()),
+        ("log lines carry a timestamp", _log_stamped()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)

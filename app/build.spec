@@ -90,4 +90,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=os.path.join(HERE, "icon.ico"),
+    # Explorer's Details tab and the UAC prompt read this. Without it the file
+    # has no product name, which looks worse than it is.
+    version=os.path.join(HERE, "version_info.txt"),
 )

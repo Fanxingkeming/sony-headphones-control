@@ -16,3 +16,4 @@ app/assets/app-icon.ico
 
 # user-supplied device artwork: Sony copyright, never commit
 app/assets/*.png
+app/assets/*.webp

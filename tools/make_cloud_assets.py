@@ -60,6 +60,19 @@ def fetch(url, path):
         f.write(r.read())
 
 
+def _save(im, dst):
+    """WebP for the shipped renders: identical at panel size, ~82% smaller.
+
+    PNG alpha was 589 KB for eight colourways; WebP q88 comes out at 105 KB,
+    which matters because every byte ends up inside the single-file exe.
+    """
+    if dst.lower().endswith(".webp"):
+        im.save(dst, "WEBP", quality=88, method=6)
+    else:
+        im.save(dst)
+    return os.path.getsize(dst)
+
+
 def _sharpen(rgba):
     """Unsharp-mask the RGB channels only, so the alpha edge stays clean.
 
@@ -94,8 +107,7 @@ def to_transparent(src, dst, size=384, pad=0.07):
     out = _sharpen(out)
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     canvas.alpha_composite(out, ((size - out.width) // 2, (size - out.height) // 2))
-    canvas.save(dst)
-    return os.path.getsize(dst)
+    return _save(canvas, dst)
 
 
 def to_transparent_light(src, dst, size=384, pad=0.06, feather=1.1,
@@ -141,8 +153,7 @@ def to_transparent_light(src, dst, size=384, pad=0.06, feather=1.1,
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     canvas.alpha_composite(out, ((size - out.width) // 2,
                                  (size - out.height) // 2))
-    canvas.save(dst)
-    return os.path.getsize(dst)
+    return _save(canvas, dst)
 
 
 def main():
@@ -153,11 +164,14 @@ def main():
         url = BASE % (sku, sku)
         src = os.path.join(CACHE, key + "_src.jpg")
         fetch(url, src)
-        dst = os.path.join(ASSETS, key + ".png")
+        dst = os.path.join(ASSETS, key + ".webp")
+        stale = os.path.join(ASSETS, key + ".png")
+        if os.path.isfile(stale):
+            os.remove(stale)          # never ship both formats
         convert = to_transparent_light if style == "light" else to_transparent
         n = convert(src, dst)
         total += n
-        print("%-13s %-5s <- %-14s -> %s.png (%6d B)" % (
+        print("%-13s %-5s <- %-14s -> %s.webp (%6d B)" % (
             key, style, sku, key, n))
     print("%d files, %.0f KB total" % (len(VARIANTS), total / 1024))
 

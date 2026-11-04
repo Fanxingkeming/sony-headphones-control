@@ -336,9 +336,13 @@ def do_connect(dev, quick=False):
         channels = (0,)
     else:
         channels = (0, 9)
-    for channel in channels:
+    # The first channel gets the full budget; a fallback only gets a short one.
+    # Both at 5 s meant a headset that is simply off kept the caller waiting a
+    # measured 10 s before reporting "not reachable".
+    for i, channel in enumerate(channels):
+        timeout = 1.2 if quick else (5.0 if i == 0 else 2.0)
         try:
-            c = tc.Client(dev["mac"], channel, timeout=1.2 if quick else 5.0)
+            c = tc.Client(dev["mac"], channel, timeout=timeout)
             break
         except Exception as e:
             last = e
@@ -386,7 +390,7 @@ NAME_HINTS = {
 PROBE_TTL = 20.0                    # seconds between automatic re-probes
 CURRENT_LOCK = threading.RLock()
 CURRENT = {"key": None, "at": 0.0, "status": "offline", "probe": "",
-           "online": [], "alternatives": 0, "color": None}
+           "online": [], "alternatives": 0, "color": None, "model": None}
 
 # Colour instruction demo fallback. The real value comes from the headset via
 # CONNECT_GET_DEVICE_INFO / SERIES_AND_COLOR_INFO (04 03) after each handshake.
@@ -400,6 +404,26 @@ def public_device(key):
     d = DEVICES[key]
     return {"id": d["id"], "name": d["name"], "short": d["short"],
             "protocol": d["protocol"], "mac": d["mac"], "caps": d["caps"]}
+
+
+def read_device_model(key, c):
+    """DEVICE_INFO / MODEL_NAME for v1: 04 01 -> 05 01 <len> <ASCII>.
+
+    v1 has no other way to learn the marketing name (status only knew the
+    short id, so the panel said "XM4"). Read once per handshake and cached,
+    which costs ~200 ms per connect instead of per status read.
+    """
+    if DEVICES[key]["protocol"] != "v1":
+        return None                    # v2 reads it inside read_status_v2()
+    try:
+        raw = c.request(bytes([0x04, 0x01]), wait=0.8, retries=0)
+    except Exception:
+        return None
+    if not raw or len(raw) < 4 or raw[0] != 0x05 or raw[1] != 0x01:
+        return None
+    n = raw[2]
+    name = bytes(raw[3:3 + n]).decode("ascii", "ignore").strip()
+    return name or None
 
 
 def read_device_color(key, c):
@@ -539,6 +563,10 @@ def probe_device(prefer=None, force=False, quiet=False, single=False):
                     CURRENT["color"] = None
                 if CURRENT["color"]:
                     remember_color(skey, CURRENT["color"])
+                try:
+                    CURRENT["model"] = read_device_model(skey, c)
+                except Exception:
+                    CURRENT["model"] = None
                 return _set_current(skey, "connected", "%s 握手成功" % DEVICES[skey]["short"],
                                     online)
 
@@ -616,6 +644,8 @@ APO_NAME_V1 = {v: k for k, v in xm4.AUTO_POWER_OFF.items()}
 
 def read_status_v1(c):
     s = empty_state("xm4")
+    if CURRENT.get("model"):
+        s["info"]["model"] = CURRENT["model"]
     r = c.request(b"\x10\x00")
     if r and len(r) >= 3:
         s["battery"]["main"] = r[2]
@@ -1027,15 +1057,29 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         path = os.path.join(ROOT, name)
-        if not os.path.isfile(path):
+        try:
+            st = os.stat(path)
+        except OSError:
             self.send_error(404)
+            return
+        # localhost-only server, but reloading the panel used to re-read every
+        # render from disk (eight colourways + two SVGs). A validator lets the
+        # browser keep what it already has; `no-cache` still forces a check, so
+        # an edited file is picked up on the next load.
+        etag = '"%x-%x"' % (int(st.st_mtime), st.st_size)
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.end_headers()
             return
         ext = os.path.splitext(name)[1]
         data = open(path, "rb").read()
         self.send_response(200)
         self.send_header("Content-Type", MIME.get(ext, "application/octet-stream"))
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("ETag", etag)
+        self.send_header("Last-Modified", self.date_time_string(int(st.st_mtime)))
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         try:
             self.wfile.write(data)

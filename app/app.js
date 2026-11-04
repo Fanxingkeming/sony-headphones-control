@@ -92,9 +92,9 @@ function progress(on){
 
 /* ModelColor suffix -> render file. Keys are the suffixes the headset reports
    in 04 03. No Sony artwork is redistributed with this repository: drop your
-   own renders into app/assets/ under these names and colour detection starts
-   working immediately. Anything missing falls back to <model>.svg and then to
-   the neutral placeholder we do ship. */
+   own renders into app/assets/ under these names (*.webp or *.png) and colour
+   detection starts working immediately. Anything missing falls back to
+   <model>.svg and then to the neutral placeholder we do ship. */
 const PHOTO_VARIANTS = {
   xm4:    { b: 'xm4', s: 'xm4_s', l: 'xm4_l', w: 'xm4_w' },
   ls900n: { l: 'ls900n', b: 'ls900n_b', w: 'ls900n_w', cream: 'ls900n_cream' },
@@ -106,7 +106,7 @@ function preloadPhotos(){
     const names = [id].concat(Object.values(PHOTO_VARIANTS[id]));
     [...new Set(names)].forEach(n => {
       const im = new Image();
-      im.src = '/assets/' + n + '.png';
+      im.src = '/assets/' + n + '.webp';
     });
     const svg = new Image();
     svg.src = '/assets/' + id + '.svg';
@@ -173,15 +173,20 @@ function renderDevice(ctx){
 
 function photoCandidates(id, color){
   // The headset reports its own ModelColor in 04 03; map it to the matching
-  // render. A colourway we have no render for is probed as <id>_<suffix>.png,
+  // render. A colourway we have no render for is probed as <id>_<suffix>,
   // then everything falls back to the default render, the traced SVG and
   // finally the neutral placeholder.
+  // Shipped renders are WebP (82% smaller inside the exe); PNG is still tried
+  // so a hand-dropped render in app/assets/ works without conversion.
   const table = PHOTO_VARIANTS[id] || {};
   const sfx = color && color.suffix;
   const list = [];
+  const add = (base) => {
+    list.push('/assets/' + base + '.webp', '/assets/' + base + '.png');
+  };
   const variant = sfx ? (table[sfx] || (id + '_' + sfx)) : null;
-  if (variant) list.push('/assets/' + variant + '.png');
-  if (list.indexOf('/assets/' + id + '.png') < 0) list.push('/assets/' + id + '.png');
+  if (variant) add(variant);
+  if (variant !== id) add(id);
   list.push('/assets/' + id + '.svg', '/assets/placeholder.svg');
   return list;
 }

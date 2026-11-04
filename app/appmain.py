@@ -15,7 +15,7 @@ import time
 import server as srv
 import tray
 
-VERSION = "1.1"
+VERSION = "1.2"
 PREFS_NAME = "prefs.json"
 PORT_NAME = "port.json"
 
@@ -79,7 +79,9 @@ def log(text):
     try:
         path = os.path.join(tray.data_dir(), "app.log")
         with open(path, "a", encoding="utf-8") as f:
-            f.write(text + "\n")
+            # Timestamped: a bare line tells you what happened but not when,
+            # which made correlating a failure with a user action impossible.
+            f.write("%s  %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), text))
         _rotate_log(path)
     except Exception:
         pass

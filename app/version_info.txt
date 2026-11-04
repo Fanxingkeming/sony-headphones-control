@@ -1,0 +1,30 @@
+# PyInstaller version resource. This is what the Explorer "Details" tab and the
+# UAC prompt read; without it the exe reports no product name at all.
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 2, 0, 0),
+    prodvers=(1, 2, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable('080404B0', [
+        StringStruct('CompanyName', 'Fanxingkeming'),
+        StringStruct('FileDescription', 'Sony Headphones Control'),
+        StringStruct('FileVersion', '1.2.0.0'),
+        StringStruct('InternalName', 'SonyHeadphonesControl'),
+        StringStruct('LegalCopyright', 'MIT License'),
+        StringStruct('OriginalFilename', 'SonyHeadphonesControl.exe'),
+        StringStruct('ProductName', 'Sony Headphones Control'),
+        StringStruct('ProductVersion', '1.2.0.0'),
+        StringStruct('Comments', 'Unofficial local control panel for WH-1000XM4 and LinkBuds S')
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)

@@ -51,6 +51,20 @@ cd app
 python build.py                  # 输出 app/SonyHeadphonesControl.exe
 python build.py --no-upx         # 不压缩
 python build.py --console        # 保留控制台，便于看报错
+python sign.py                   # 可选：用你自己的证书签名（见下）
+```
+
+exe 已带版本资源（产品名 / 版本号 / 版权），Explorer 的「详细信息」和 UAC 提示都能正确显示。
+**但文件是未签名的**，所以首次运行时 SmartScreen 会拦一次，点「更多信息 → 仍要运行」即可。
+
+想让警告真正消失只有一条路：买一张 CA 签发的代码签名证书（OV 需要累积下载量才有信誉，
+EV 立即生效但要用硬件令牌）。**自签名证书没有帮助**——Windows 依然显示「未知发布者」，
+同时还要求用户安装一个他们没有理由信任的证书。拿到证书后：
+
+```bash
+set SHC_PFX=C:\path\to\cert.pfx
+set SHC_PFX_PASSWORD=...
+python app/sign.py
 ```
 
 ### 指定耳机 MAC
@@ -144,15 +158,18 @@ python tools/sdp_probe.py                          # 探测 RFCOMM 通道
 所以同一副耳机换配色会自动换图：
 
 ```
-app/assets/xm4.png          # WH-1000XM4，也是黑色款
-app/assets/xm4_s.png        # 铂金银   (ModelColor.SILVER)
-app/assets/xm4_l.png        # 深夜蓝   (ModelColor.BLUE)
-app/assets/xm4_w.png        # 白       (ModelColor.WHITE)
-app/assets/ls900n.png       # LinkBuds S，也是地球蓝款
-app/assets/ls900n_b.png     # 黑
-app/assets/ls900n_w.png     # 白
-app/assets/ls900n_cream.png # 米色     (ModelColor.CREAM)
+app/assets/xm4.webp          # WH-1000XM4，也是黑色款
+app/assets/xm4_s.webp        # 铂金银   (ModelColor.SILVER)
+app/assets/xm4_l.webp        # 深夜蓝   (ModelColor.BLUE)
+app/assets/xm4_w.webp        # 白       (ModelColor.WHITE)
+app/assets/ls900n.webp       # LinkBuds S，也是地球蓝款
+app/assets/ls900n_b.webp     # 黑
+app/assets/ls900n_w.webp     # 白
+app/assets/ls900n_cream.webp # 米色     (ModelColor.CREAM)
 ```
+
+`.png` 同样可用（会先试 `.webp` 再试 `.png`），不需要转换。内置资源用 WebP 是因为
+它比 PNG 小约 82%，而这些图最终会被打进单文件 exe 里。
 
 查不到对应配色的文件时会依次回退：默认机型图 → `app/assets/<机型>.svg` → 内置占位图。
 颜色与文件名的映射表在 `app/app.js` 的 `PHOTO_VARIANTS`，`selftest.py` 会交叉检查
