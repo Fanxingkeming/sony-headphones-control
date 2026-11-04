@@ -458,6 +458,16 @@ async function api(path, body, timeout){
 }
 
 /* ---------------- single-device identity ---------------- */
+/* The Bluetooth address is an identifier the user may not want on screen
+   (screenshots, shoulder surfing). Shown abbreviated everywhere it is
+   display-only; the manual-entry input keeps the full value. */
+function maskMac(m){
+  if (!m) return m || '';
+  const p = String(m).split(':');
+  if (p.length !== 6) return m;
+  return p[0] + ':' + p[1] + ':…:' + p[4] + ':' + p[5];
+}
+
 function renderDevice(ctx){
   context = ctx;
   device = ctx.device.id;
@@ -466,7 +476,7 @@ function renderDevice(ctx){
   $('#devbadge').innerHTML =
     `<span class="devbadge-dot ${ctx.status}"></span>` +
     `<div class="devbadge-text"><b>${esc(d.name)}</b>` +
-    `<small>MDR ${esc(d.protocol.toUpperCase())} · ${esc(d.mac)}` +
+    `<small>MDR ${esc(d.protocol.toUpperCase())} · ${esc(maskMac(d.mac))}` +
     `${live ? ' ' + t('· 已连接') : ' ' + t('· 未连接')}</small></div>`;
   $('#btnSwitch').classList.toggle('hidden', !(ctx.alternatives > 0));
   $('#btnSwitch').title = ctx.alternatives > 0
@@ -481,7 +491,7 @@ const BT_MODEL = { xm4: 'WH-1000XM4', ls900n: 'LinkBuds S' };
 let btScan = { devices: [] };
 
 function btOptionLabel(d){
-  const name = d.name || d.mac;
+  const name = d.name || maskMac(d.mac);
   const model = BT_MODEL[d.guess || d.owner] || '';
   const state = t(d.connected ? '已连接' : (d.remembered ? '已配对' : '未配对'));
   const parts = [name];
@@ -501,7 +511,7 @@ function renderBt(j){
   // Keep the saved address selectable even when the headset is switched off,
   // otherwise the picker would look empty exactly when nothing is nearby.
   if (cur && !list.some(d => d.mac === cur)) {
-    html.unshift(`<option value="${esc(cur)}">${esc(cur)} · 已保存（当前不在附近）</option>`);
+    html.unshift(`<option value="${esc(cur)}">${esc(maskMac(cur))} · 已保存（当前不在附近）</option>`);
   }
   if (!html.length) {
     html.push('<option value="">未发现已配对的蓝牙设备</option>');
@@ -542,7 +552,7 @@ async function autoBind(){
   if (same.length !== 1) return false;
   try {
     await bindDevice(device, same[0].mac);
-    toast(t('已自动识别 ') + (same[0].name || same[0].mac));
+    toast(t('已自动识别 ') + (same[0].name || maskMac(same[0].mac)));
     return true;
   } catch (e) {
     return false;
@@ -640,7 +650,7 @@ function render(){
   $('#conntext').textContent = s.connected ? '已连接' : '未连接';
 
   // overview
-  $('#ov-sub').textContent = s.name + ' · ' + s.mac;
+  $('#ov-sub').textContent = s.name + ' · ' + maskMac(s.mac);
   $('#ov-proto').textContent = 'MDR ' + s.protocol.toUpperCase();
   const bm = hasVal(s.battery.main) ? s.battery.main : null;
   $('#bat-main').textContent = bm === null ? '--' : bm;
