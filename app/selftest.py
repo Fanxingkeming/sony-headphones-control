@@ -80,6 +80,24 @@ def _measure_ok():
     return bool(t._measure_item(ctypes.byref(mis))) and mis.itemHeight > 0
 
 
+def _atomic_config_ok():
+    import json as _json
+    import tempfile
+    d = tempfile.mkdtemp()
+    orig = srv.CONFIG_PATH
+    try:
+        srv.CONFIG_PATH = os.path.join(d, "config.json")
+        srv.save_config()
+        ok = (os.path.isfile(srv.CONFIG_PATH)
+              and not os.path.exists(srv.CONFIG_PATH + ".tmp"))
+        _json.load(open(srv.CONFIG_PATH, encoding="utf-8"))
+        return ok
+    except Exception:
+        return False
+    finally:
+        srv.CONFIG_PATH = orig
+
+
 def main():
     s1 = srv.read_status_v1(FakeV1())
     lb.xfer, lb.t2_cmd = fake_xfer, fake_t2
@@ -177,6 +195,22 @@ def main():
          any("当前耳机" in x for x in _menu_labels())),
         ("tray mutates measure struct",
          _measure_ok()),
+        # Cross-site guard: the local panel is unauthenticated.
+        ("origin accepts the panel itself",
+         srv.same_origin("127.0.0.1:8765", "http://127.0.0.1:8765", None, 8765)),
+        ("origin accepts localhost",
+         srv.same_origin("localhost:8765", "http://localhost:8765", None, 8765)),
+        ("origin accepts local CLI (no headers)",
+         srv.same_origin(None, None, None, 8765)),
+        ("origin rejects a foreign Host (DNS rebinding)",
+         not srv.same_origin("evil.example:8765", None, None, 8765)),
+        ("origin rejects a foreign Origin",
+         not srv.same_origin("127.0.0.1:8765", "http://evil.example", None, 8765)),
+        ("origin rejects cross-site fetch",
+         not srv.same_origin("127.0.0.1:8765", None, "cross-site", 8765)),
+        # Atomic config write must not leave a temp file behind.
+        ("config write is atomic",
+         _atomic_config_ok()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)

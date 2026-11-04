@@ -62,13 +62,29 @@ function banner(html, err){
 }
 function clearBanner(){ $('#banner').classList.add('hidden'); }
 
-async function api(path, body){
+async function api(path, body, timeout){
+  // A stuck backend used to leave the busy overlay up forever: every request
+  // now has a deadline, and the server's `hint` survives to the banner.
   const opt = body ? {method:'POST', headers:{'Content-Type':'application/json'},
                       body:JSON.stringify(body)} : {};
-  const r = await fetch(path, opt);
-  const j = await r.json();
-  if (j.ok === false) throw new Error(j.error || '请求失败');
-  return j;
+  const ac = new AbortController();
+  opt.signal = ac.signal;
+  const timer = setTimeout(() => ac.abort(), timeout || 8000);
+  try {
+    const r = await fetch(path, opt);
+    const j = await r.json();
+    if (j.ok === false) {
+      const err = new Error(j.error || '请求失败');
+      if (j.hint) err.hint = j.hint;
+      throw err;
+    }
+    return j;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('请求超时：后端无响应');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /* ---------------- single-device identity ---------------- */
@@ -121,20 +137,28 @@ async function loadContext(force, quiet){
 }
 
 /* ---------------- status ---------------- */
-async function loadStatus(){
+let statusInFlight = false;
+async function loadStatus(fresh){
+  // The 20 s poll and a manual refresh can collide on a single RFCOMM link;
+  // queueing them only doubles the latency, so a second call is dropped.
+  if (statusInFlight) return;
+  statusInFlight = true;
   busy(true, '正在连接设备（最多约 20 秒）…');
   try {
-    const j = await api(`/api/status?device=${encodeURIComponent(device)}`);
+    const q = `device=${encodeURIComponent(device)}` + (fresh ? '&fresh=1' : '');
+    const j = await api(`/api/status?${q}`, null, 25000);
     state = j.state;
     clearBanner();
     render();
   } catch (e) {
-    banner(`<b>设备未连接。</b> ${esc(e.message)}` +
+    const hint = e.hint ? ' ' + esc(e.hint) : '';
+    banner(`<b>设备未连接。</b> ${esc(e.message)}${hint}` +
            ` <button class="btn small" id="bannerRetry">重试</button>`, true);
     const btn = $('#bannerRetry');
-    if (btn) btn.onclick = () => loadStatus();
+    if (btn) btn.onclick = () => loadStatus(true);
     toast(e.message, true);
   } finally {
+    statusInFlight = false;
     busy(false);
     loadLog();
   }
@@ -323,7 +347,7 @@ function bind(){
       try { await api('/api/disconnect', {}); } catch(e){}
       clearBanner();
       await loadContext(true);
-      await loadStatus();
+      await loadStatus(true);
       toast('状态已刷新');
     } catch(e) {
       toast(e.message, true);

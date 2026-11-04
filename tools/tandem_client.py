@@ -172,7 +172,13 @@ class Client:
             raise OSError(f"send 失败, WSAError={ws2.WSAGetLastError()}")
         return f
 
-    def _read(self, wait=2.0):
+    def _read(self, wait=2.0, until=None):
+        """Read frames for up to `wait` seconds.
+
+        `until(frame)` lets a caller stop the moment its reply has arrived.
+        Without it every read also paid the 0.2 s select timeout even when the
+        answer was already decoded, which added ~200 ms to every single command.
+        """
         frames = []
         t0 = time.time()
         while time.time() - t0 < wait:
@@ -194,6 +200,8 @@ class Client:
                         self.seq = self.pending_seq ^ 1
                         self.pending_seq = None
                     frames.append((p, raw))
+                    if until is not None and until(p):
+                        return frames
             r, _, _ = select.select([self.sock], [], [], 0.2)
             if not r:
                 if frames:
@@ -206,7 +214,7 @@ class Client:
             self.buf += chunk.raw[:n]
         return frames
 
-    def request(self, payload, dtype=T1, wait=2.0, retries=1):
+    def request(self, payload, dtype=T1, wait=1.2, retries=1):
         """发请求，ACK 所有入站帧，返回 payload 首字节等于 (cmd|1) 的响应。
 
         未收到 ACK 时按协议重发同一 seq（retries 次），不推进序号。
@@ -218,7 +226,9 @@ class Client:
         left = retries
         while True:
             while time.time() < deadline:
-                for p, raw in self._read(max(0.05, deadline - time.time())):
+                for p, raw in self._read(
+                        max(0.05, deadline - time.time()),
+                        until=lambda q: bool(q["payload"]) and q["payload"][0] == want):
                     if p["type"] == ACK:
                         continue
                     ack = self._send(ACK, b"", seq=p["seq"] ^ 1)

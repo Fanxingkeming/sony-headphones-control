@@ -70,13 +70,20 @@ def connect(mac=MAC, channel=CHANNEL):
     return c
 
 
-def xfer(c, payload, want=None, wait=2.5):
-    """发送并主动收流。不能用 request()：v2 会同时推 a5/a9 播放信息，混在同一流里。"""
+def xfer(c, payload, want=None, wait=1.0):
+    """发送并主动收流。不能用 request()：v2 会同时推 a5/a9 播放信息，混在同一流里。
+
+    `wait` only bounds the *no reply* case: a matching frame returns at once.
+    Real hardware answers in well under 100 ms, so 1.0 s is generous while a
+    command the device does not implement no longer stalls the status read for
+    2.5 s each.
+    """
     want = (payload[0] | 0x01) if want is None else want
     c._send(tc.T1, payload)
     t_end = time.time() + wait
     while time.time() < t_end:
-        for p, raw in c._read(0.4):
+        for p, raw in c._read(
+                0.4, until=lambda q: bool(q["payload"]) and q["payload"][0] == want):
             if p["type"] == tc.ACK:
                 continue
             c._send(tc.ACK, b"", seq=p["seq"] ^ 1)

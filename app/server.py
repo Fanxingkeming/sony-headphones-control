@@ -102,11 +102,21 @@ def save_config():
         data[k] = entry
     if LAST_DEVICE:
         data["last_device"] = LAST_DEVICE
+    # Write to a sibling temp file and rename: a crash mid-write must never
+    # leave a truncated config.json, which would silently lose the MAC and the
+    # cached colour on the next start.
+    tmp = CONFIG_PATH + ".tmp"
     try:
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, CONFIG_PATH)
     except OSError:
-        pass
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def remember_color(key, color):
@@ -234,6 +244,35 @@ class Session:
 
 SESSION = Session()
 
+# A status snapshot costs a dozen round trips on a single RFCOMM link, so a
+# short window is shared by the UI poll, a manual refresh and the read-back
+# after a write. Any state-changing POST invalidates it.
+STATUS_CACHE = {"key": None, "at": 0.0, "state": None}
+STATUS_TTL = 2.0
+
+# When the headset is off, every status read costs a full connect attempt.
+# A short cool-down keeps the UI from re-paying that on every poll; an explicit
+# refresh (?fresh=1) bypasses it.
+STATUS_FAIL = {"until": 0.0}
+STATUS_FAIL_COOLDOWN = 3.0
+
+
+def same_origin(host, origin, site, port):
+    """True only for requests issued by the local panel itself.
+
+    The service is unauthenticated and listens on loopback, so without this any
+    page open in the same browser could POST to 127.0.0.1 and toggle the
+    headset. A DNS-rebinding page would additionally arrive with a foreign Host
+    header, which the host check rejects.
+    """
+    hosts = {"127.0.0.1:%d" % port, "localhost:%d" % port}
+    if host and host.lower() not in hosts:
+        return False
+    if origin:
+        return origin in ("http://127.0.0.1:%d" % port,
+                          "http://localhost:%d" % port)
+    return site in (None, "same-origin", "none")
+
 
 def do_connect(dev, quick=False):
     """Open the MDR link. `quick` is used by device discovery: short socket
@@ -243,7 +282,18 @@ def do_connect(dev, quick=False):
     tc.SONY_UUID = dev["uuid"]
     last = None
     c = None
-    for channel in (0, 9):
+    # LinkBuds S never resolves through the SDP path in practice (verified:
+    # SDP fails, the fixed channel answers), and an SDP connect can block for
+    # tens of seconds inside Winsock before our own timeout applies. So the v2
+    # device is pinned to channel 9 and never falls back to SDP. The XM4 needs
+    # SDP, with channel 9 as a fallback.
+    if dev["protocol"] == "v2":
+        channels = (9,)
+    elif quick:
+        channels = (0,)
+    else:
+        channels = (0, 9)
+    for channel in channels:
         try:
             c = tc.Client(dev["mac"], channel, timeout=1.2 if quick else 5.0)
             break
@@ -954,17 +1004,37 @@ class Handler(BaseHTTPRequestHandler):
             if q.get("demo", ["0"])[0] == "1":
                 self._json({"ok": True, "state": demo_state(key)})
                 return
+            fresh = q.get("fresh", ["0"])[0] == "1"
+            if not fresh and time.monotonic() < STATUS_FAIL["until"]:
+                self._json({"ok": False, "error": "设备暂时不可达",
+                            "hint": "耳机开机并连上后点「↻ 刷新」重试。"})
+                return
+            now = time.monotonic()
+            if (not fresh and STATUS_CACHE["key"] == key
+                    and STATUS_CACHE["state"] is not None
+                    and now - STATUS_CACHE["at"] < STATUS_TTL):
+                self._json({"ok": True, "state": STATUS_CACHE["state"]})
+                return
             try:
                 with SESSION.lock:
                     c = SESSION.get(key)
                     try:
                         st = read_status(key, c)
                     except Exception:
-                        # Only retry once when an established link broke mid-read.
+                        # Retry only when a live link existed and broke mid-read.
+                        # If the connect itself failed there is nothing to
+                        # retry, and a second attempt would just double the
+                        # offline wait (observed 5 s -> 10 s).
+                        if SESSION.client is None:
+                            raise
                         c = SESSION.get(key, force=True)
                         st = read_status(key, c)
+                STATUS_CACHE.update({"key": key, "at": time.monotonic(),
+                                     "state": st})
                 self._json({"ok": True, "state": st})
             except Exception as e:
+                STATUS_CACHE["state"] = None
+                STATUS_FAIL["until"] = time.monotonic() + STATUS_FAIL_COOLDOWN
                 SESSION.fail(e)
                 self._json({"ok": False, "error": str(e),
                             "hint": "耳机开机、从盒中取出，并在手机上完全退出 Sound Connect 后重试；"
@@ -975,6 +1045,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path)
         p = u.path
+        if not same_origin(self.headers.get("Host"), self.headers.get("Origin"),
+                           self.headers.get("Sec-Fetch-Site"),
+                           self.server.server_port):
+            self._json({"ok": False, "error": "已拒绝跨站请求"}, 403)
+            return
+        STATUS_CACHE["state"] = None          # a write invalidates the snapshot
         n = int(self.headers.get("Content-Length", "0") or 0)
         try:
             body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
