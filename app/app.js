@@ -213,9 +213,18 @@ const EN = {
 function t(s){ return (LANG === 'en' && EN[s]) ? EN[s] : s; }
 
 /* Backend messages are formatted in Python, so an exact-match table cannot work.
-   These patterns cover the ones a user actually sees: connection failures and
-   the two generic hints. Anything unmatched stays Chinese rather than guesses. */
+   These patterns cover everything the panel can surface: connection failures,
+   the generic hints and the result text of every /api/action call. Anything
+   unmatched stays Chinese rather than guessing. */
+const _onoff = (v) => (v === '开' ? 'on' : 'off');
+const _cap = (v) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : v);
+const _apo = (v) => ({ off: 'off', '5min': '5 min', '30min': '30 min',
+                       '1h': '1 hour', '3h': '3 hours', takenoff: 'when taken off' })[v] || v;
+const _key = (v) => ({ volume: 'volume', playback: 'playback',
+                       quick_ambient: 'ambient control', none: 'none' })[v] || v;
+
 const MSG_EN = [
+  /* --- connection --- */
   [/^(.+)：connect 超时。确认耳机已开机、已从充电盒取出，且手机上的 Sound Connect 已完全退出。$/,
    '$1: connect timed out. Make sure the headset is on, out of the charging case, and that Sound Connect is closed on the phone.'],
   [/^(.+)：connect 失败, SO_ERROR=(\d+)。.*$/,
@@ -223,7 +232,51 @@ const MSG_EN = [
   [/^设备暂时不可达$/, 'Headset unreachable'],
   [/^耳机开机、从盒中取出，并在手机上完全退出 Sound Connect 后重试。$/,
    'Turn the headset on, take it out of the case and quit Sound Connect on the phone, then retry.'],
+  [/^耳机开机并连上后点「↻ 刷新」重试。$/,
+   'Turn the headset on and connect it, then click \u21bb Refresh.'],
   [/^请求失败$/, 'Request failed'],
+  [/^未知设备$/, 'Unknown device'],
+  [/^已拒绝跨站请求$/, 'Cross-site request rejected'],
+  [/^请求体不是合法 JSON$/, 'Request body is not valid JSON'],
+  [/^设备或 MAC 格式不正确$/, 'Invalid device or MAC address'],
+  [/^MAC 含非法字符$/, 'MAC address contains invalid characters'],
+  [/^连接可能已断开。点右上角「↻ 刷新」重新连接。$/,
+   'The link may have dropped. Click \u21bb Refresh at the top right to reconnect.'],
+  [/^操作失败：(.+)$/, 'Action failed: $1'],
+
+  /* --- noise cancelling --- */
+  [/^已执行$/, 'Done'],
+  [/^已切换到降噪$/, 'Noise cancelling on'],
+  [/^已切换到环境声$/, 'Ambient sound on'],
+  [/^已关闭降噪处理$/, 'Noise cancelling off'],
+  [/^已切换$/, 'Switched'],
+  [/^环境声等级 → (\d+)$/, 'Ambient level → $1'],
+  [/^关注语音 → (开|关)$/, (m, v) => 'Focus on voice → ' + _onoff(v)],
+  [/^已启用风噪降低$/, 'Wind noise reduction on'],
+
+  /* --- sound --- */
+  [/^EQ 预设 → (\S+)$/, (m, v) => 'EQ preset → ' + _cap(v)],
+  [/^自定义 EQ 已写入并读回$/, 'Custom EQ written and read back'],
+  [/^DSEE Extreme → (自动|关)$/, (m, v) => 'DSEE Extreme → ' + (v === '自动' ? 'auto' : 'off')],
+  [/^连接模式 → (稳定优先|音质优先)$/,
+   (m, v) => 'Connection mode → ' + (v === '稳定优先' ? 'stable first' : 'sound quality first')],
+  [/^语音向导写入（v1 无读回，请用 App 确认）$/,
+   'Voice guidance written (v1 has no read-back; confirm in the phone app)'],
+  [/^通知和语音向导 → (开|关)$/, (m, v) => 'Notifications & voice guide → ' + _onoff(v)],
+
+  /* --- system --- */
+  [/^智能免摘 \/ 智能对话 → (开|关)$/, (m, v) => 'Speak-to-Chat → ' + _onoff(v)],
+  [/^智能对话扩展参数已写入$/, 'Speak-to-Chat parameters written'],
+  [/^自动断电 → (\S+)$/, (m, v) => 'Auto power off → ' + _apo(v)],
+  [/^取下暂停 → (开|关)$/, (m, v) => 'Pause when removed → ' + _onoff(v)],
+  [/^触摸面板 → (开|关)$/, (m, v) => 'Touch sensor → ' + _onoff(v)],
+  [/^多点连接写入完成（设备将断开重连）。收到 (\d+) 条告警并已应答。$/,
+   'Multipoint written (the headset will reconnect). $1 alert(s) received and acknowledged.'],
+  [/^LinkBuds S 的多点连接是只读的，设备不接受写入$/,
+   'Multipoint is read-only on LinkBuds S; the headset rejects writes'],
+  [/^按键分配 → 左 (\S+) \/ 右 (\S+)$/,
+   (m, l, r) => 'Button assignment → L ' + _key(l) + ' / R ' + _key(r)],
+  [/^未知操作：(.+)$/, 'Unknown action: $1'],
 ];
 
 function tmsg(s){
@@ -322,10 +375,10 @@ function progress(on){
 }
 
 /* ModelColor suffix -> render file. Keys are the suffixes the headset reports
-   in 04 03. No Sony artwork is redistributed with this repository: drop your
-   own renders into app/assets/ under these names (*.webp or *.png) and colour
-   detection starts working immediately. Anything missing falls back to
-   <model>.svg and then to the neutral placeholder we do ship. */
+   in 04 03; values are what actually ships in app/assets. The bare model name
+   is used for the colourway it was rendered in, so no byte-identical copy is
+   shipped twice (xm4.png is the black one, ls900n.png the earth-blue one).
+   Keep in sync with make_cloud_assets.py. */
 const PHOTO_VARIANTS = {
   xm4:    { b: 'xm4', s: 'xm4_s', l: 'xm4_l', w: 'xm4_w' },
   ls900n: { l: 'ls900n', b: 'ls900n_b', w: 'ls900n_w', cream: 'ls900n_cream' },
