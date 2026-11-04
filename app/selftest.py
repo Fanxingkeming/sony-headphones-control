@@ -395,11 +395,13 @@ def main():
         ("white maps to the white LinkBuds render",
          _photo_table().get("ls900n", {}).get("w") == "ls900n_w"),
         # Tray menu is owner-drawn and must not expose a demo entry any more.
-        ("tray menu has 7 labelled items", len(_menu_labels()) == 7),
+        ("tray menu has 8 labelled items", len(_menu_labels()) == 8),
         ("tray menu has no demo entry",
          not any("演示" in x for x in _menu_labels())),
         ("tray menu shows the live headset",
          any("当前耳机" in x for x in _menu_labels())),
+        ("tray menu exposes the font size",
+         any("菜单字号" in x for x in _menu_labels())),
         ("tray mutates measure struct",
          _measure_ok()),
         # Cross-site guard: the local panel is unauthenticated.

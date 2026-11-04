@@ -2,6 +2,29 @@
 
 [![selftest](https://github.com/Fanxingkeming/sony-headphones-control/actions/workflows/selftest.yml/badge.svg)](https://github.com/Fanxingkeming/sony-headphones-control/actions/workflows/selftest.yml)
 
+**English** — a single-file Windows tray app with a local web panel that talks to Sony
+headsets over Bluetooth RFCOMM, without the phone app and without third-party Python
+packages.
+
+- **Supported models: WH-1000XM4 (MDR v1) and LinkBuds S / WF-LS900N (MDR v2).**
+  Nothing else is adapted; other models are not supported and will not be.
+- Shows exactly the headset the app actually established an MDR session with — the
+  choice is made by a real handshake, not by the Windows pairing list.
+- ANC / ambient with 20 levels, 6-band EQ, DSEE, connection quality, Speak-to-Chat,
+  auto power off, touch panel, multipoint, per-earbud battery where the model reports it.
+- Reads the headset's own colour (`04 03`) and picks the matching product render.
+- English / Chinese UI (follows the system language; force with `?lang=en`), light and
+  dark theme, single-file exe around 3.5 MiB.
+
+Quick start: `python app/server.py` → <http://127.0.0.1:8765>; the tray app is
+`python app/appmain.py`; `python app/build.py` produces `SonyHeadphonesControl.exe`.
+The self-test is offline and runs with `python app/selftest.py` (also on CI).
+
+Everything below is in Chinese. Backend messages (connect errors, action results) are
+Chinese-only; the interface chrome is translated.
+
+---
+
 在 Windows 上通过逆向得到的 **Sony MDR / Tandem 协议**，本地控制索尼耳机的单文件小工具。
 纯 Python 标准库实现（运行时不依赖任何第三方包），带系统托盘和本地 Web 控制面板。
 

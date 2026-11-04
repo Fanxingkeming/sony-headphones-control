@@ -53,6 +53,237 @@ function chooseTheme(t){
   }
 })();
 
+
+/* ---------------- language ---------------- */
+/* Chinese source text doubles as the lookup key: a miss simply stays Chinese,
+   so an untranslated string degrades instead of showing a raw key. Server-side
+   messages (connect errors, action results) are still Chinese — they are built
+   in Python and would need the language passed down. */
+const LANG_KEY = 'shcp.lang';
+const LANG = (function(){
+  const q = qs.get('lang');
+  if (q === 'zh' || q === 'en') { try { localStorage.setItem(LANG_KEY, q); } catch(e){} return q; }
+  try { const v = localStorage.getItem(LANG_KEY); if (v === 'zh' || v === 'en') return v; } catch(e){}
+  return (navigator.language || 'zh').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+})();
+
+const EN = {
+  "Control Panel · MDR Protocol · 非官方工具": "Control Panel · MDR Protocol · unofficial tool",
+  "未连接": "Disconnected",
+  "↻ 刷新": "↻ Refresh",
+  "切换明暗主题": "Toggle light/dark theme",
+  "重新读取所有状态": "Re-read every value",
+  "设备概览": "Overview",
+  "电量": "Battery",
+  "型号": "Model",
+  "固件版本": "Firmware",
+  "当前编解码": "Codec",
+  "协议": "Protocol",
+  "机身颜色": "Colour",
+  "颜色指令": "Colour command",
+  "产品系列": "Series",
+  "系列 / 颜色": "Series / colour",
+  "头戴式 · 单电池": "Over-ear · single battery",
+  "充电盒 ": "Case ",
+  "左 ": "Left ",
+  "右 ": "Right ",
+  "当前耳机": "Current headset",
+  "当前耳机：": "Current headset: ",
+  "切换": "Switch",
+  "⇄ 切换": "⇄ Switch",
+  "切换到另一副已连接的耳机": "Switch to the other connected headset",
+  "当前只检测到这一副耳机": "Only this headset is detected",
+  "蓝牙设备": "Bluetooth device",
+  "扫描": "Scan",
+  "手动": "Manual",
+  "断开": "Disconnect",
+  "蓝牙 MAC": "Bluetooth address",
+  "保存并重连": "Save & reconnect",
+  "选择要控制的耳机（自动从已配对的蓝牙设备中识别）": "Pick the headset to control (detected from paired devices)",
+  "重新扫描已配对的蓝牙设备": "Rescan paired Bluetooth devices",
+  "释放设备，把耳机让回给手机": "Release the headset so the phone can take over",
+  "设备改名或未识别时，手动填写 MAC": "Enter the address by hand if the device was renamed",
+  "未发现已配对的蓝牙设备": "No paired Bluetooth devices found",
+  "没有发现已配对的蓝牙设备": "No paired Bluetooth devices found",
+  "已连接": "Connected",
+  "已配对": "Paired",
+  "未配对": "Not paired",
+  "· 已连接": "· Connected",
+  "· 未连接": "· Disconnected",
+  "已保存（当前不在附近）": "saved (not nearby)",
+  "降噪 / 环境声": "Noise cancelling / ambient",
+  "降噪": "Noise cancelling",
+  "环境声": "Ambient sound",
+  "关闭": "Off",
+  "环境声等级": "Ambient level",
+  "环境声下聚焦人声": "Focus on voice in ambient sound",
+  "关注语音": "Focus on voice",
+  "风噪降低": "Wind noise reduction",
+  "自动": "Auto",
+  "高": "High",
+  "低": "Low",
+  "声音": "Sound",
+  "均衡器": "Equalizer",
+  "预设": "Preset",
+  "自定义": "Custom",
+  "自定义 1": "Custom 1",
+  "自定义 2": "Custom 2",
+  "低音": "Bass",
+  "人声": "Vocal",
+  "明亮": "Bright",
+  "激昂": "Excited",
+  "柔和": "Mellow",
+  "轻松": "Relaxed",
+  "语音": "Speech",
+  "低音增强": "Bass boost",
+  "高音增强": "Treble boost",
+  "压缩音源升频": "Upscale compressed audio",
+  "连接质量": "Connection quality",
+  "音质优先（LDAC）": "Sound quality first (LDAC)",
+  "稳定连接优先": "Stable connection first",
+  "EQ · 6 段自定义": "EQ · 6-band custom",
+  "归零": "Reset",
+  "写入自定义 EQ": "Apply custom EQ",
+  "仅支持预设，动作不可单独改": "Presets only; the action itself is fixed",
+  "系统设置": "System",
+  "智能免摘 / 智能对话": "Speak-to-Chat",
+  "智能免摘": "Speak-to-Chat",
+  "智能对话": "Speak-to-Chat",
+  "开启后说话会自动暂停播放": "Playback pauses while you speak",
+  "自动断电": "Auto power off",
+  "退出时间": "Off timer",
+  "取下耳机时": "When taken off",
+  "取下即关": "When taken off",
+  "5 分钟": "5 minutes",
+  "30 分钟": "30 minutes",
+  "1 小时": "1 hour",
+  "3 小时": "3 hours",
+  "触摸式传感器面板": "Touch sensor panel",
+  "取下耳机时暂停": "Pause when taken off",
+  "多点连接": "Multipoint",
+  "同时连接两台设备": "Connect two devices at once",
+  "只读 · 设备拒绝写入": "Read-only · the device refuses writes",
+  "按键 / 触摸功能分配": "Button / touch assignment",
+  "左耳": "Left",
+  "右耳": "Right",
+  "音量控制": "Volume",
+  "播放控制": "Playback",
+  "快速环境声": "Quick ambient",
+  "无": "None",
+  "写入分配": "Apply assignment",
+  "对话灵敏度": "Speak-to-Chat sensitivity",
+  "快": "Fast",
+  "中": "Medium",
+  "慢": "Slow",
+  "通知和语音向导": "Notifications and voice guidance",
+  "启用": "Enabled",
+  "Table#2 · 00 = 开": "Table#2 · 00 = on",
+  "v1 无读回 · 仅写入，请用 App 确认": "v1 has no read-back; confirm in the App",
+  "写入后请用 App 确认模式": "Confirm the mode in the App after writing",
+  "写入后链路会断开重连": "The link drops and reconnects after writing",
+  "原始帧日志": "Raw frame log",
+  "最近收发的 MDR 帧（十六进制）": "Recent MDR frames (hex)",
+  "暂无数据": "No data yet",
+  "暂无数据（尚未与耳机通信）": "No data yet (nothing exchanged with the headset yet)",
+  "正在读取设备…": "Reading the device…",
+  "正在与设备通信…": "Talking to the device…",
+  "正在保存配置…": "Saving…",
+  "正在写入并读回…": "Writing and reading back…",
+  "正在写入 6 段 EQ…": "Writing the 6-band EQ…",
+  "正在切换到另一副耳机…": "Switching to the other headset…",
+  "完成": "Done",
+  "状态已刷新": "Status refreshed",
+  "刷新": "Refresh",
+  "重试": "Retry",
+  "已断开，下次操作会重新连接": "Disconnected; the next action reconnects",
+  "MAC 已保存，正在重新连接": "Address saved, reconnecting",
+  "已切换到 ": "Switched to ",
+  "已自动识别 ": "Detected ",
+  "蓝牙扫描不可用：": "Bluetooth scan unavailable: ",
+  "后端未就绪。": "Backend not ready.",
+  "设备未连接。": "Headset not connected.",
+  "已保存": "saved",
+  "发现 ": "Found ",
+  " 台音频设备": " audio devices",
+  "请求失败": "Request failed",
+  "请求超时：后端无响应": "Timed out: the backend did not answer",
+  "本地运行 · 不上传任何数据 · 同一时刻只允许一个 tandem 客户端（请先退出手机上的 Sound Connect）": "Runs locally · uploads nothing · only one tandem client at a time (quit Sound Connect on the phone first)"
+};
+
+function t(s){ return (LANG === 'en' && EN[s]) ? EN[s] : s; }
+
+/* Backend messages are formatted in Python, so an exact-match table cannot work.
+   These patterns cover the ones a user actually sees: connection failures and
+   the two generic hints. Anything unmatched stays Chinese rather than guesses. */
+const MSG_EN = [
+  [/^(.+)：connect 超时。确认耳机已开机、已从充电盒取出，且手机上的 Sound Connect 已完全退出。$/,
+   '$1: connect timed out. Make sure the headset is on, out of the charging case, and that Sound Connect is closed on the phone.'],
+  [/^(.+)：connect 失败, SO_ERROR=(\d+)。.*$/,
+   '$1: connect failed (SO_ERROR=$2). The headset is probably still held by the phone.'],
+  [/^设备暂时不可达$/, 'Headset unreachable'],
+  [/^耳机开机、从盒中取出，并在手机上完全退出 Sound Connect 后重试。$/,
+   'Turn the headset on, take it out of the case and quit Sound Connect on the phone, then retry.'],
+  [/^请求失败$/, 'Request failed'],
+];
+
+function tmsg(s){
+  if (LANG !== 'en' || !s) return s;
+  for (const [re, rep] of MSG_EN) if (re.test(s)) return s.replace(re, rep);
+  return s;
+}
+
+/* Translate in place. Idempotent: English text is never a key, so a second
+   pass over the same subtree changes nothing. */
+let _localizing = false;
+function localize(root){
+  if (LANG !== 'en' || _localizing || !root) return;
+  _localizing = true;
+  try {
+    if (root.nodeType === 3) {
+      const v = root.nodeValue, key = (v || '').trim();
+      if (key && EN[key]) root.nodeValue = v.replace(key, EN[key]);
+    } else {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        // [data-raw] marks text that must survive translation verbatim, such
+        // as the 中/EN toggle label.
+        acceptNode(n) {
+          const el = n.parentNode;
+          if (el && el.closest && el.closest('[data-raw]')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      const pending = [];
+      while (walker.nextNode()) pending.push(walker.currentNode);
+      pending.forEach(n => {
+        const v = n.nodeValue, key = (v || '').trim();
+        if (key && EN[key]) n.nodeValue = v.replace(key, EN[key]);
+      });
+      if (root.querySelectorAll) {
+        root.querySelectorAll('[placeholder],[title],[aria-label]').forEach(el => {
+          ['placeholder', 'title', 'aria-label'].forEach(a => {
+            const v = el.getAttribute(a);
+            if (v && EN[v.trim()]) el.setAttribute(a, EN[v.trim()]);
+          });
+        });
+      }
+    }
+  } finally {
+    _localizing = false;
+  }
+}
+
+/* Every screen in this panel is built by re-writing innerHTML, so one observer
+   covers all of them (and toasts) without touching each render function. */
+function watchLanguage(){
+  if (LANG !== 'en') return;
+  localize(document.body);
+  const mo = new MutationObserver(() => {
+    if (_localizing) return;
+    requestAnimationFrame(() => localize(document.body));
+  });
+  mo.observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
 // The panel shows exactly ONE headset: the one the app actually established an
 // MDR session with. There is deliberately no two-device chooser. `device` is
 // assigned by /api/context.
@@ -115,7 +346,7 @@ function preloadPhotos(){
 let toastTimer;
 function toast(msg, bad){
   const t = $('#toast');
-  t.textContent = msg;
+  t.textContent = tmsg(msg);
   t.classList.toggle('bad', !!bad);
   t.classList.add('show');
   clearTimeout(toastTimer);
@@ -164,7 +395,7 @@ function renderDevice(ctx){
     `<span class="devbadge-dot ${ctx.status}"></span>` +
     `<div class="devbadge-text"><b>${esc(d.name)}</b>` +
     `<small>MDR ${esc(d.protocol.toUpperCase())} · ${esc(d.mac)}` +
-    `${live ? ' · 已连接' : ' · 未连接'}</small></div>`;
+    `${live ? ' ' + t('· 已连接') : ' ' + t('· 未连接')}</small></div>`;
   $('#btnSwitch').classList.toggle('hidden', !(ctx.alternatives > 0));
   $('#btnSwitch').title = ctx.alternatives > 0
     ? '切换到另一副已连接的耳机' : '当前只检测到这一副耳机';
@@ -180,7 +411,7 @@ let btScan = { devices: [] };
 function btOptionLabel(d){
   const name = d.name || d.mac;
   const model = BT_MODEL[d.guess || d.owner] || '';
-  const state = d.connected ? '已连接' : (d.remembered ? '已配对' : '未配对');
+  const state = t(d.connected ? '已连接' : (d.remembered ? '已配对' : '未配对'));
   const parts = [name];
   if (model && model.toLowerCase() !== name.toLowerCase()) parts.push(model);
   parts.push(state);
@@ -206,7 +437,7 @@ function renderBt(j){
   sel.innerHTML = html.join('');
   if (cur) sel.value = cur;
   if (!btScan.available && btScan.error) {
-    sel.title = '蓝牙扫描不可用：' + btScan.error;
+    sel.title = t('蓝牙扫描不可用：') + btScan.error;
   }
 }
 
@@ -239,7 +470,7 @@ async function autoBind(){
   if (same.length !== 1) return false;
   try {
     await bindDevice(device, same[0].mac);
-    toast('已自动识别 ' + (same[0].name || same[0].mac));
+    toast(t('已自动识别 ') + (same[0].name || same[0].mac));
     return true;
   } catch (e) {
     return false;
@@ -291,12 +522,15 @@ async function loadContext(force, quiet){
 
 /* ---------------- status ---------------- */
 let statusInFlight = false;
-async function loadStatus(fresh){
+/* `silent` skips the progress bar and the error banner: used by the idle
+   refresh below, where a once-a-minute flash would be worse than the stale
+   value it is replacing. */
+async function loadStatus(fresh, silent){
   // The 20 s poll and a manual refresh can collide on a single RFCOMM link;
   // queueing them only doubles the latency, so a second call is dropped.
   if (statusInFlight) return;
   statusInFlight = true;
-  progress(true);
+  if (!silent) progress(true);
   try {
     const q = `device=${encodeURIComponent(device)}` + (fresh ? '&fresh=1' : '');
     const j = await api(`/api/status?${q}`, null, 25000);
@@ -304,15 +538,17 @@ async function loadStatus(fresh){
     clearBanner();
     render();
   } catch (e) {
-    const hint = e.hint ? ' ' + esc(e.hint) : '';
-    banner(`<b>设备未连接。</b> ${esc(e.message)}${hint}` +
-           ` <button class="btn small" id="bannerRetry">重试</button>`, true);
-    const btn = $('#bannerRetry');
-    if (btn) btn.onclick = () => loadStatus(true);
-    toast(e.message, true);
+    if (!silent) {
+      const hint = e.hint ? ' ' + esc(tmsg(e.hint)) : '';
+      banner(`<b>${t('设备未连接。')}</b> ${esc(tmsg(e.message))}${hint}` +
+             ` <button class="btn small" id="bannerRetry">重试</button>`, true);
+      const btn = $('#bannerRetry');
+      if (btn) btn.onclick = () => loadStatus(true);
+      toast(e.message, true);
+    }
   } finally {
     statusInFlight = false;
-    progress(false);
+    if (!silent) progress(false);
     busy(false);
     loadLog();
   }
@@ -468,7 +704,7 @@ async function doSwitch(){
     renderDevice(j.context || j);
     loadBt();                          // the picker follows the active headset
     await loadStatus();
-    toast('当前耳机：' + context.device.name);
+    toast(t('当前耳机：') + context.device.name);
   } catch(e) {
     toast(e.message, true);
     busy(false);
@@ -512,6 +748,12 @@ function bind(){
   };
 
   $('#btnSwitch').onclick = doSwitch;
+  $('#btnLang').textContent = LANG === 'en' ? '中' : 'EN';
+  $('#btnLang').onclick = () => {
+    try { localStorage.setItem(LANG_KEY, LANG === 'en' ? 'zh' : 'en'); } catch(e){}
+    location.reload();          // every string is regenerated on load
+  };
+
   $('#btnTheme').onclick = () => chooseTheme(
     document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 
@@ -526,7 +768,7 @@ function bind(){
     try {
       await bindDevice(target, mac);
       await loadStatus(true);
-      toast('已切换到 ' + (target === 'xm4' ? 'WH-1000XM4' : 'LinkBuds S'));
+      toast(t('已切换到 ') + (target === 'xm4' ? 'WH-1000XM4' : 'LinkBuds S'));
     } catch (e) {
       toast(e.message, true);
     } finally {
@@ -538,12 +780,27 @@ function bind(){
     progress(true);
     try {
       const j = await loadBt(true);
-      toast(j && j.devices.length
-        ? `发现 ${j.devices.filter(d => d.audio || d.guess).length} 台音频设备`
-        : '没有发现已配对的蓝牙设备');
+      const n = j ? j.devices.filter(d => d.audio || d.guess).length : 0;
+      toast(j && n ? `${t('发现 ')}${n}${t(' 台音频设备')}` : t('没有发现已配对的蓝牙设备'));
     } finally {
       progress(false);
     }
+  };
+
+  $('#btnDisconnect').onclick = async () => {
+    // The headset accepts one tandem client; releasing it here is what lets
+    // the phone take over again without touching the tray menu.
+    try {
+      await api('/api/disconnect', {});
+    } catch (e) {
+      toast(e.message, true);
+      return;
+    }
+    if (context) {
+      context.status = 'offline';
+      renderDevice(context);
+    }
+    toast('已断开，下次操作会重新连接');
   };
 
   $('#btnBtManual').onclick = () => {
@@ -592,6 +849,7 @@ function bind(){
 
 (async function init(){
   bind();
+  watchLanguage();
   preloadPhotos();
   progress(true);
   try {
@@ -615,6 +873,19 @@ function bind(){
       (location.search.replace(/[?&]switch=1/, '') || ''));
     setTimeout(doSwitch, 400);        // tray "switch headset" opens this URL
   }
+  // Nothing re-reads the values after the first load, so a panel left open
+  // shows a frozen battery/ANC state. Refresh slowly in the background, and
+  // immediately when the tab regains focus.
+  const idleRefresh = () => {
+    if (document.hidden || acting || statusInFlight) return;
+    loadStatus(false, true);
+  };
+  setInterval(idleRefresh, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) idleRefresh();
+  });
+  window.addEventListener('focus', idleRefresh);
+
   // If the headset is turned off and another one takes over, follow it.
   setInterval(async () => {
     if (document.hidden || acting) return;

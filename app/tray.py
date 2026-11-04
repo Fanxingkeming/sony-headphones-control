@@ -70,6 +70,11 @@ ERROR_ALREADY_EXISTS = 183
 
 ID_OPEN, ID_CURRENT, ID_SWITCH = 1001, 1010, 1011
 ID_AUTOSTART, ID_DISCONNECT, ID_ABOUT, ID_QUIT = 1030, 1040, 1050, 1099
+ID_FONT = 1060
+
+# Menu text sizes offered by the 菜单字号 item. 13 px matches Microsoft YaHei UI
+# at 100 %% scaling; 11 and 15 are the usual "denser" and "bigger" wishes.
+FONT_STEPS = (11, 13, 15)
 
 
 class POINT(ctypes.Structure):
@@ -427,7 +432,14 @@ class Tray:
             return 96
 
     def _font_height(self):
-        return max(12, int(round(13 * self._dpi() / 96)))
+        # The size is a preference, so it can be changed from the menu itself
+        # without rebuilding the exe.
+        try:
+            base = int(self.cb.get("get_state", lambda: {})().get("menu_px") or 13)
+        except Exception:
+            base = 13
+        base = max(9, base)
+        return max(10, int(round(base * self._dpi() / 96)))
 
     def _item_height(self):
         return self._font_height() + int(round(9 * self._dpi() / 96))
@@ -461,6 +473,7 @@ class Tray:
         item(ID_SWITCH, "切换到另一副耳机")
         sep()
         item(ID_AUTOSTART, ("✓ " if st.get("autostart") else "     ") + "开机自动启动")
+        item(ID_FONT, "菜单字号：" + str(st.get("menu_px") or 13) + " px")
         sep()
         item(ID_DISCONNECT, "重新连接设备")
         item(ID_ABOUT, "关于 / 状态")
@@ -550,6 +563,11 @@ class Tray:
             c.get("on_disconnect", lambda: None)()
         elif cmd == ID_ABOUT:
             c.get("on_about", lambda: None)()
+        elif cmd == ID_FONT:
+            cur = int(st.get("menu_px") or 13)
+            nxt = FONT_STEPS[(FONT_STEPS.index(cur) + 1) % len(FONT_STEPS)] \
+                if cur in FONT_STEPS else FONT_STEPS[1]
+            c.get("on_menu_font", lambda v: None)(nxt)
         elif cmd == ID_QUIT:
             c.get("on_quit", lambda: None)()
             self.stop()

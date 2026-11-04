@@ -1236,8 +1236,7 @@ class Handler(BaseHTTPRequestHandler):
                 STATUS_FAIL["until"] = time.monotonic() + STATUS_FAIL_COOLDOWN
                 SESSION.fail(e)
                 self._json({"ok": False, "error": str(e),
-                            "hint": "耳机开机、从盒中取出，并在手机上完全退出 Sound Connect 后重试；"
-                                    "也可以切到演示模式查看完整界面。"})
+                            "hint": "耳机开机、从盒中取出，并在手机上完全退出 Sound Connect 后重试。"})
             return
         self.send_error(404)
 
@@ -1311,7 +1310,7 @@ class Handler(BaseHTTPRequestHandler):
                 SESSION.fail(e)
                 log_exception()
                 self._json({"ok": False, "error": "操作失败：%s" % e,
-                            "hint": "连接可能已断开。点「重新连接」或切到演示模式。"})
+                            "hint": "连接可能已断开。点右上角「↻ 刷新」重新连接。"})
             return
 
         self.send_error(404)

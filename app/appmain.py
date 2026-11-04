@@ -108,7 +108,7 @@ class App:
         self.data = tray.data_dir()
         self.prefs_path = os.path.join(self.data, PREFS_NAME)
         self.port_path = os.path.join(self.data, PORT_NAME)
-        self.prefs = {"device": "xm4"}
+        self.prefs = {"device": "xm4", "menu_px": 13}
         try:
             with open(self.prefs_path, encoding="utf-8") as f:
                 self.prefs.update(json.load(f))
@@ -168,7 +168,13 @@ class App:
     def state(self):
         key = self.current_key()
         return {"device": key, "device_label": srv.DEVICES[key]["short"],
-                "autostart": tray.autostart_enabled()}
+                "autostart": tray.autostart_enabled(),
+                "menu_px": int(self.prefs.get("menu_px") or 13)}
+
+    def set_menu_font(self, px):
+        self.prefs["menu_px"] = int(px)
+        self.save_prefs()
+        log("tray menu font -> %d px" % self.prefs["menu_px"])
 
     def set_autostart(self, on):
         try:
@@ -260,6 +266,7 @@ class App:
             "on_open": self.open_panel,
             "on_switch": self.switch_panel,
             "on_autostart": self.set_autostart,
+            "on_menu_font": self.set_menu_font,
             "on_disconnect": self.disconnect,
             "on_about": self.about,
             "on_quit": self.quit,
