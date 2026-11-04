@@ -14,7 +14,7 @@ packages.
   auto power off, touch panel, multipoint, per-earbud battery where the model reports it.
 - Reads the headset's own colour (`04 03`) and picks the matching product render.
 - English / Chinese UI (follows the system language; force with `?lang=en`), light and
-  dark theme, single-file exe around 3.5 MiB.
+  dark theme, single-file exe around 3.3 MiB.
 
 Quick start: `python app/server.py` → <http://127.0.0.1:8765>; the tray app is
 `python app/appmain.py`; `python app/build.py` produces `SonyHeadphonesControl.exe`.
@@ -65,6 +65,16 @@ Chinese-only; the interface chrome is translated.
 见下文「刻意没有放进仓库的内容」）；没有放图时界面会退化为内置的中性占位图形。
 界面上的蓝牙地址为占位值。
 
+
+## 下载
+
+当前版本 **v1.0.0**，见 [Releases](https://github.com/Fanxingkeming/sony-headphones-control/releases)。
+
+- `SonyHeadphonesControl.exe` — 单文件、约 3.3 MiB、免安装、无第三方运行时依赖
+- 发布的 exe **不包含 Sony 的产品渲染图与 Sound Connect 应用图标**（版权原因，见
+  「仓库里不包含什么」），界面使用内嵌线稿图与程序化图标；想看真机图，把图片放进
+  exe 旁边的 `assets` 文件夹即可，无需重新构建
+- 文件未签名，首次运行 SmartScreen 会拦一次，点「更多信息 → 仍要运行」
 
 ## 快速开始
 

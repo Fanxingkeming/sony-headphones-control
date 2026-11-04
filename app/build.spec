@@ -8,8 +8,27 @@ TOOLS = os.path.normpath(os.path.join(HERE, "..", "tools"))
 # Static assets are read from sys._MEIPASS by server.py at runtime.
 DATAS = [(os.path.join(HERE, f), ".") for f in ("index.html", "style.css", "app.js")]
 ASSETS_DIR = os.path.join(HERE, "assets")
+
+# SHC_CLEAN=1 produces the redistributable package. It leaves out the official
+# Sony store renders and the Sound Connect app icon, neither of which can be
+# redistributed; the panel then falls back to the traced line art and the
+# programmatic tray icon. A user who owns the artwork can drop the renders into
+# an `assets` folder next to the exe (server.asset_path prefers that folder).
+CLEAN = os.environ.get("SHC_CLEAN") == "1"
 if os.path.isdir(ASSETS_DIR):
-    DATAS.append((ASSETS_DIR, "assets"))
+    # The traced line art (xm4.svg / ls900n.svg) is only a fallback for a
+    # checkout without product renders. When the WebP render is present the SVG
+    # is unreachable, so bundling it would just add ~35 KB to the exe.
+    rendered = {os.path.splitext(n)[0] for n in os.listdir(ASSETS_DIR)
+                if n.endswith(".webp")}
+    for name in sorted(os.listdir(ASSETS_DIR)):
+        stem, ext = os.path.splitext(name)
+        if CLEAN:
+            if ext == ".webp" or name == "app-icon.ico":
+                continue
+        elif ext == ".svg" and stem in rendered:
+            continue
+        DATAS.append((os.path.join(ASSETS_DIR, name), "assets"))
 
 # Verified against the runtime import set of appmain + server + tray.
 # `email`, `http.client`, `ssl`, `ipaddress`, `datetime` MUST stay (http.server).

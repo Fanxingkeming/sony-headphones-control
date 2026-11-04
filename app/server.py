@@ -28,6 +28,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FROZEN = getattr(sys, "frozen", False)
 # In a PyInstaller onefile build the HTML/CSS/JS live in the extraction dir.
 ROOT = sys._MEIPASS if FROZEN else HERE
+# The redistributable build ships no Sony artwork, so a user who wants the
+# official product renders drops them into an `assets` folder next to the exe.
+# That folder wins over the bundled fallbacks (traced line art / placeholder).
+LOCAL_ASSETS = os.path.join(HERE, "assets") if FROZEN else None
 TOOLS = os.path.normpath(os.path.join(HERE, "..", "tools"))
 sys.path.insert(0, TOOLS)
 
@@ -1142,7 +1146,7 @@ def apply_action(key, c, action, value):
 
 STATIC = {"": "index.html", "/": "index.html", "/index.html": "index.html",
           "/style.css": "style.css", "/app.js": "app.js",
-          "/favicon.ico": "assets/placeholder.svg"}
+          "/favicon.ico": "assets/app-icon.ico"}
 MIME = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
         ".js": "application/javascript; charset=utf-8",
         ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp",
@@ -1154,10 +1158,19 @@ MIME = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
 _ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.(?:png|svg|webp|ico)\Z")
 
 
+def asset_path(name):
+    """Resolve a bundled asset, preferring the user's own folder next to the exe."""
+    if LOCAL_ASSETS:
+        p = os.path.join(LOCAL_ASSETS, name)
+        if os.path.isfile(p):
+            return p
+    return os.path.join(ROOT, "assets", name)
+
+
 def asset_allowed(name):
     if not _ASSET_NAME.match(name):
         return False
-    return os.path.isfile(os.path.join(ROOT, "assets", name))
+    return os.path.isfile(asset_path(name))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1179,10 +1192,14 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def _file(self, name):
-        if name.startswith("assets/") and not asset_allowed(name.split("/")[-1]):
-            self.send_error(404)
-            return
-        path = os.path.join(ROOT, name)
+        if name.startswith("assets/"):
+            base = name.split("/")[-1]
+            if not asset_allowed(base):
+                self.send_error(404)
+                return
+            path = asset_path(base)
+        else:
+            path = os.path.join(ROOT, name)
         try:
             st = os.stat(path)
         except OSError:
@@ -1217,6 +1234,10 @@ class Handler(BaseHTTPRequestHandler):
         p, q = u.path, parse_qs(u.query)
         if p in STATIC:
             f = STATIC[p]
+            # The redistributable build carries no app icon; fall back to the
+            # neutral placeholder instead of answering 404 for the tab icon.
+            if f == "assets/app-icon.ico" and not asset_allowed("app-icon.ico"):
+                f = "assets/placeholder.svg"
             if f is None:
                 self.send_response(204)
                 self.send_header("Content-Length", "0")

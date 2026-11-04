@@ -17,7 +17,7 @@ import sys
 import tray
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DIST = HERE                      # land the single deliverable in the app folder
+DIST = os.environ.get("SHC_OUT") or HERE   # land the deliverable in the app folder
 ICON = os.path.join(HERE, "icon.ico")
 
 
@@ -28,7 +28,7 @@ def make_ico(path, sizes=(16, 32, 48)):
     still be built before the brand assets have been generated.
     """
     src = os.path.join(HERE, "assets", "app-icon.ico")
-    if os.path.isfile(src):
+    if os.path.isfile(src) and os.environ.get("SHC_CLEAN") != "1":
         shutil.copyfile(src, path)
         print("icon: %s (%d bytes, Sound Connect app logo)" % (
             path, os.path.getsize(path)))
