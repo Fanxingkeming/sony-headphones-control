@@ -677,7 +677,10 @@ def empty_state(key):
     return {
         "device": key, "name": dev["name"], "protocol": dev["protocol"],
         "mac": dev["mac"], "caps": dev["caps"], "connected": False, "demo": False,
-        "info": {"model": dev["short"], "firmware": "?", "codec": "?",
+        # Until the headset reports its own model string (read once during the
+        # handshake), show the full marketing name rather than the short code,
+        # so the panel never degrades to a bare "XM4".
+        "info": {"model": dev["name"], "firmware": "?", "codec": "?",
                  "series": "", "color": None},
         "battery": {"main": None, "left": None, "right": None, "case": None},
         "anc": {"mode": "?", "level": 0, "focus": False},
