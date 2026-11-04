@@ -250,6 +250,48 @@ SESSION = Session()
 STATUS_CACHE = {"key": None, "at": 0.0, "state": None}
 STATUS_TTL = 2.0
 
+# Low-battery watch. The level is only known from a status read, so the check
+# rides along with one instead of adding radio traffic; appmain drains ALERTS
+# and turns each entry into a tray balloon.
+ALERTS = []
+ALERTS_LOCK = threading.Lock()
+BATTERY_WATCH = {"key": None, "stage": 0}     # stage 0 ok, 1 low, 2 critical
+BATTERY_LOW, BATTERY_CRITICAL, BATTERY_RESET = 20, 10, 25
+
+
+def pop_alert():
+    with ALERTS_LOCK:
+        return ALERTS.pop(0) if ALERTS else None
+
+
+def check_battery(key, st):
+    """Queue one balloon per battery stage transition.
+
+    The stage only moves forward until the headset is charged past
+    BATTERY_RESET, so a level hovering around 20 % cannot spam the tray.
+    """
+    level = ((st or {}).get("battery") or {}).get("main")
+    if not isinstance(level, int):
+        return
+    if BATTERY_WATCH["key"] != key:
+        # First sighting after a device change: remember, never alert.
+        BATTERY_WATCH.update({"key": key, "stage": 0})
+        return
+    stage = BATTERY_WATCH["stage"]
+    if level > BATTERY_RESET and stage:
+        BATTERY_WATCH["stage"] = 0
+        return
+    if level <= BATTERY_CRITICAL and stage < 2:
+        BATTERY_WATCH["stage"] = 2
+        title, text = "耳机电量不足", "%s 仅剩 %d%%，请尽快充电。"
+    elif level <= BATTERY_LOW and stage < 1:
+        BATTERY_WATCH["stage"] = 1
+        title, text = "耳机电量偏低", "%s 剩余 %d%%，建议充电。"
+    else:
+        return
+    with ALERTS_LOCK:
+        ALERTS.append((title, text % (DEVICES[key]["name"], level)))
+
 # When the headset is off, every status read costs a full connect attempt.
 # A short cool-down keeps the UI from re-paying that on every poll; an explicit
 # refresh (?fresh=1) bypasses it.
@@ -367,14 +409,22 @@ def read_device_color(key, c):
     hides the colour rows instead of guessing.
     """
     proto = DEVICES[key]["protocol"]
-    # v1 also defines SERIES_AND_COLOR_INFO (0x03), but the reply shape has
-    # not been verified on our XM4. Skip it so the fast v1 handshake stays
-    # fast; parse_series_color() already understands the 3-byte v1 form when
-    # a capture becomes available.
-    if proto != "v2":
-        return None
+    # Verified on hardware for BOTH generations: each answers
+    # 05 03 <series> <color> to GET_DEVICE_INFO / SERIES_AND_COLOR_INFO.
+    #   WH-1000XM4 -> 05 03 30 01  (PREMIUM / BLACK)   ~98 ms
+    #   WF-LS900N  -> 05 03 60 02  (LINK_BUDS / WHITE)
+    # v2 needs the frame-pumping xfer() because it interleaves a5/a9 pushes;
+    # v1 uses the plain stop-and-wait request().
     try:
-        raw = lb.xfer(c, bytes([0x04, 0x03]), wait=0.8)
+        if proto == "v2":
+            raw = lb.xfer(c, bytes([0x04, 0x03]), wait=0.8)
+        else:
+            raw = c.request(bytes([0x04, 0x03]), wait=0.8, retries=0)
+            if not raw:
+                # The first exchange right after a reconnect can swallow a
+                # leftover frame from the previous link; one extra ask costs
+                # nothing when the headset answers (it replies in ~100 ms).
+                raw = c.request(bytes([0x04, 0x03]), wait=0.8, retries=0)
     except Exception:
         return None
     return lb.parse_series_color(raw, proto)
@@ -662,7 +712,28 @@ def read_status(key, c):
     s = read_status_v1(c) if DEVICES[key]["protocol"] == "v1" else read_status_v2(c)
     s["connected"] = True
     s["info"]["color"] = CURRENT.get("color") or CACHED_COLOR.get(key)
+    check_battery(key, s)
     return s
+
+
+def battery_tick():
+    """Refresh the battery on an already-open link, for the tray watch thread.
+
+    It deliberately never connects: an idle app must not keep waking the
+    headset, and a connect attempt on a sleeping device blocks for seconds.
+    """
+    key = CURRENT.get("key")
+    if key not in DEVICES:
+        return None
+    with SESSION.lock:
+        if SESSION.client is None:
+            return None
+        try:
+            st = read_status(key, SESSION.get(key))
+        except Exception:
+            return None
+        STATUS_CACHE.update({"key": key, "at": time.monotonic(), "state": st})
+    return st.get("battery", {}).get("main")
 
 
 # ---------------------------------------------------------------------------

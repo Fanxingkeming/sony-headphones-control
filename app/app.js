@@ -8,15 +8,49 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 const qs = new URLSearchParams(location.search);
 
 /* ---------------- theme ---------------- */
-function applyTheme(t){
-  document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light';
-  try { localStorage.setItem('shcp.theme', document.documentElement.dataset.theme); } catch(e){}
+/* A choice is "explicit" once the user names one (?theme= or the toggle).
+   Until then the panel keeps following the OS, including live changes. */
+const THEME_KEY = 'shcp.theme';
+const mediaDark = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+let themeExplicit = false;
+
+function systemTheme(){
+  return (mediaDark && mediaDark.matches) ? 'dark' : 'light';
 }
+
+function applyTheme(t, remember){
+  const theme = (t === 'dark') ? 'dark' : 'light';
+  document.documentElement.dataset.theme = theme;
+  if (remember) {
+    themeExplicit = true;
+    try { localStorage.setItem(THEME_KEY, theme); } catch(e){}
+  }
+}
+
+/* Picking the theme the system is already using drops the override, so the
+   panel resumes following the OS after the user toggles back to it. */
+function chooseTheme(t){
+  const theme = (t === 'dark') ? 'dark' : 'light';
+  if (theme === systemTheme()) {
+    themeExplicit = false;
+    try { localStorage.removeItem(THEME_KEY); } catch(e){}
+    applyTheme(theme, false);
+  } else {
+    applyTheme(theme, true);
+  }
+}
+
 (function initTheme(){
   let t = qs.get('theme');
-  if (!t) { try { t = localStorage.getItem('shcp.theme'); } catch(e){} }
-  if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  applyTheme(t);
+  if (t) { applyTheme(t, true); return; }
+  try { t = localStorage.getItem(THEME_KEY); } catch(e){}
+  if (t) { applyTheme(t, true); return; }
+  applyTheme(systemTheme(), false);
+  if (mediaDark) {
+    const onChange = (e) => { if (!themeExplicit) applyTheme(e.matches ? 'dark' : 'light', false); };
+    if (mediaDark.addEventListener) mediaDark.addEventListener('change', onChange);
+    else if (mediaDark.addListener) mediaDark.addListener(onChange);   // old Edge
+  }
 })();
 
 // The panel shows exactly ONE headset: the one the app actually established an
@@ -375,7 +409,7 @@ function bind(){
   };
 
   $('#btnSwitch').onclick = doSwitch;
-  $('#btnTheme').onclick = () => applyTheme(
+  $('#btnTheme').onclick = () => chooseTheme(
     document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 
   $('#btnMac').onclick = async () => {

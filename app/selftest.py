@@ -98,6 +98,67 @@ def _atomic_config_ok():
         srv.CONFIG_PATH = orig
 
 
+def _colour_v1():
+    """XM4 really answers 05 03 30 01: PREMIUM series, BLACK."""
+    d = lb.parse_series_color(bytes([0x05, 0x03, 0x30, 0x01]))
+    return (d["en"] == "BLACK" and d["series"] == 0x30
+            and d["series_enum"] == "PREMIUM" and d["suffix"] == "b")
+
+
+def _colour_v2():
+    d = lb.parse_series_color(bytes([0x05, 0x03, 0x60, 0x02]))
+    return (d["en"] == "WHITE" and d["series_enum"] == "LINK_BUDS"
+            and d["suffix"] == "w")
+
+
+def _v1_colour_read():
+    """read_device_color must work for v1 too, via the plain request() path."""
+    class FakeV1:
+        def request(self, payload, wait=1.0, retries=0):
+            assert payload == b"\x04\x03", payload
+            return bytes([0x05, 0x03, 0x30, 0x01])
+
+    d = srv.read_device_color("xm4", FakeV1())
+    return bool(d) and d["en"] == "BLACK"
+
+
+def _battery_stages():
+    """One alert per stage; nothing repeats until the headset is recharged."""
+    srv.BATTERY_WATCH.update({"key": None, "stage": 0})
+    del srv.ALERTS[:]
+    seq = [50, 19, 18, 9, 8, 40, 19]
+    out = []
+    for level in seq:
+        srv.check_battery("xm4", {"battery": {"main": level}})
+        out.append(len(srv.ALERTS))
+        del srv.ALERTS[:]
+    # first sighting silent, low once, quiet, critical once, quiet, reset, low again
+    ok = out == [0, 1, 0, 1, 0, 0, 1]
+    srv.check_battery("xm4", {"battery": {"main": None}})
+    return ok and not srv.ALERTS
+
+
+def _theme_follows():
+    js = open(os.path.join(srv.ROOT, "app.js"), encoding="utf-8").read()
+    return ("addEventListener('change'" in js and "themeExplicit" in js
+            and "function chooseTheme(" in js
+            and "localStorage.removeItem(THEME_KEY)" in js)
+
+
+def _rotate_ok():
+    import tempfile
+    import appmain
+    d = tempfile.mkdtemp()
+    path = os.path.join(d, "app.log")
+    with open(path, "wb") as f:
+        f.write(b"x" * (appmain.LOG_MAX + 1))
+    appmain.LOG_TICKS["n"] = 63          # the next call performs the size check
+    appmain._rotate_log(path)
+    rotated = path + ".1"
+    return (not os.path.exists(path) and os.path.exists(rotated)
+            and os.path.getsize(rotated) > appmain.LOG_MAX)
+
+
 def main():
     s1 = srv.read_status_v1(FakeV1())
     lb.xfer, lb.t2_cmd = fake_xfer, fake_t2
@@ -166,7 +227,8 @@ def main():
         ("colour instruction shows raw reply",
          srv.DEMO_COLOR["ls900n"]["instruction"] == "04 03 → 05 03 60 02"),
         ("colour series = LinkBuds",
-         srv.DEMO_COLOR["ls900n"]["series_name"] == "LinkBuds" and
+         srv.DEMO_COLOR["ls900n"]["series_name"] == "LinkBuds (LINK_BUDS)" and
+         srv.DEMO_COLOR["ls900n"]["series_enum"] == "LINK_BUDS" and
          srv.DEMO_COLOR["ls900n"]["series"] == 0x60),
         ("v1 3-byte colour reply",
          lb.parse_series_color(bytes.fromhex("05 03 01"), "v1")["name"] == "黑色"),
@@ -211,6 +273,18 @@ def main():
         # Atomic config write must not leave a temp file behind.
         ("config write is atomic",
          _atomic_config_ok()),
+        # Colour identification on both protocol generations.
+        ("v1 colour decodes BLACK/PREMIUM", _colour_v1()),
+        ("v2 colour decodes WHITE/LINK_BUDS", _colour_v2()),
+        ("read_device_color works for v1", _v1_colour_read()),
+        ("unknown colour degrades safely", lb.parse_series_color(
+            bytes([0x05, 0x03, 0x30, 0x7F]))["en"] == "UNKNOWN"),
+        # Battery alerts: one balloon per stage, reset only after a recharge.
+        ("battery alerts fire once per stage", _battery_stages()),
+        # Log rotation keeps app.log bounded.
+        ("log rotates past the size cap", _rotate_ok()),
+        # Theme keeps following the OS until the user picks one explicitly.
+        ("theme listens for OS changes", _theme_follows()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)

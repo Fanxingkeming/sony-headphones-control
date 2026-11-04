@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import threading
+import time
 
 import server as srv
 import tray
@@ -49,10 +50,37 @@ def _set_dpi_awareness():
 DPI_MODE = _set_dpi_awareness()
 
 
+LOG_MAX = 512 * 1024          # one generation is plenty for a tray app
+LOG_TICKS = {"n": 0}
+
+
+def _rotate_log(path):
+    """Keep app.log bounded: rename to .1 and start over.
+
+    An always-on tray app logs on every start and every failure, so without
+    this the file grows forever. The size is checked every 64 writes instead of
+    on each one, which keeps the common path at a single append.
+    """
+    LOG_TICKS["n"] += 1
+    if LOG_TICKS["n"] % 64:
+        return
+    try:
+        if os.path.getsize(path) < LOG_MAX:
+            return
+    except OSError:
+        return
+    try:
+        os.replace(path, path + ".1")
+    except OSError:
+        pass
+
+
 def log(text):
     try:
-        with open(os.path.join(tray.data_dir(), "app.log"), "a", encoding="utf-8") as f:
+        path = os.path.join(tray.data_dir(), "app.log")
+        with open(path, "a", encoding="utf-8") as f:
             f.write(text + "\n")
+        _rotate_log(path)
     except Exception:
         pass
 
@@ -170,6 +198,35 @@ class App:
             pass
         log("stopped")
 
+    def _battery_watch(self):
+        """Drain queued battery alerts and refresh the level now and then.
+
+        Alerts are produced inside read_status(), i.e. whenever the panel is
+        open. The periodic tick additionally re-reads the level over the link
+        that is already established, so a headset left connected overnight
+        still warns even if no browser is open. It never opens a new link.
+        """
+        first_tick = time.monotonic() + 90        # let the start-up probe settle
+        next_tick = first_tick
+        while not self._stopped:
+            try:
+                item = srv.pop_alert()
+            except Exception:
+                item = None
+            if item:
+                try:
+                    log("battery alert: %s" % item[1])
+                    self.tray.balloon(item[0], item[1])
+                except Exception:
+                    pass
+            if time.monotonic() >= next_tick:
+                next_tick = time.monotonic() + 600
+                try:
+                    srv.battery_tick()
+                except Exception:
+                    pass
+            time.sleep(2)
+
     def _sync_tip(self):
         if self.tray:
             d = srv.DEVICES[self.current_key()]
@@ -208,6 +265,8 @@ class App:
         })
         self._sync_tip()
         self.tray.balloon("Sony 耳机控制面板", "已启动，双击图标打开面板；右键显示菜单")
+        threading.Thread(target=self._battery_watch, name="battery-watch",
+                         daemon=True).start()
         if not self.minimized:
             threading.Timer(0.9, self.open_panel).start()
         self.tray.run()                       # blocks until 退出

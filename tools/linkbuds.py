@@ -189,14 +189,33 @@ MODEL_COLORS = {
     0x0D: ("棕色", "BROWN", "brown"),
     0x0E: ("紫色", "VIOLET", "violet"),
 }
-SERIES_NAMES = {0x60: "LinkBuds"}
+# ModelSeries, verbatim from libmdr's public headers (ProtocolV1T1.hpp /
+# ProtocolV2T1.hpp). v2 adds 0x11 and 0x70-0x90. Verified on hardware:
+# WH-1000XM4 replies 05 03 30 01 -> PREMIUM / BLACK,
+# WF-LS900N  replies 05 03 60 02 -> LINK_BUDS / WHITE.
+SERIES_NAMES = {
+    0x00: ("无系列", "NO_SERIES"),
+    0x10: ("重低音", "EXTRA_BASS"),
+    0x11: ("ULT POWER SOUND", "ULT_POWER_SOUND"),
+    0x20: ("聆听", "HEAR"),
+    0x30: ("高端", "PREMIUM"),
+    0x40: ("运动", "SPORTS"),
+    0x50: ("日常", "CASUAL"),
+    0x60: ("LinkBuds", "LINK_BUDS"),
+    0x70: ("颈挂", "NECKBAND"),
+    0x80: ("LinkBuds 系列", "LINKPOD"),
+    0x90: ("游戏", "GAMING"),
+    0xFF: ("超出范围", "OUT_OF_RANGE"),
+}
 
 
 def parse_series_color(r, protocol="v2"):
     """Decode a SERIES_AND_COLOR_INFO reply into a display-ready dict.
 
-    v2: 05 03 <series> <color>   (4 bytes)
-    v1: 05 03 <color>            (3 bytes, no series field)
+    Both generations answer 05 03 <series> <color>: libmdr declares the series
+    field at offset 0x2 for v1 as well, and our XM4 returns 05 03 30 01
+    (PREMIUM / BLACK) on the wire. A 3-byte reply is still accepted and treated
+    as colour-only in case a model omits the series byte.
     Returns None when the reply is not a colour reply, so callers can degrade
     gracefully on a headset that does not implement this device-info type.
     """
@@ -211,13 +230,18 @@ def parse_series_color(r, protocol="v2"):
     if 0x11 <= code <= 0x1E:
         base, variant = code - 0x10, "_I"
     name, en, suffix = MODEL_COLORS.get(base, ("未知", "UNKNOWN", ""))
-    series_name = (SERIES_NAMES.get(series, "0x%02x" % series)
-                   if series is not None else "")
+    series_name = ""
+    series_enum = ""
+    if series is not None:
+        label, enum = SERIES_NAMES.get(series, ("0x%02x" % series, "UNKNOWN"))
+        series_name = "%s (%s)" % (label, enum)
+        series_enum = enum
     raw = r.hex(" ")
     return {
         "code": code, "base": base, "name": name, "en": en,
         "variant": variant, "suffix": suffix,
         "series": series, "series_name": series_name,
+        "series_enum": series_enum,
         "raw": raw,
         "label": "%s (0x%02x)" % (name + (" I" if variant else ""), code),
         "instruction": "04 03 → " + raw,
