@@ -624,7 +624,11 @@ class Tray:
                     self._add_icon()
                     return 0
                 if msg == WM_CLOSE:
-                    self.stop()
+                    # A tray icon has no close affordance: quitting is the
+                    # menu's 退出 item, which calls on_quit() and then stop().
+                    # Ignoring a stray WM_CLOSE keeps the background app alive
+                    # when another tool pokes the hidden window. A real log-off
+                    # still ends the process through WM_ENDSESSION/WM_DESTROY.
                     return 0
                 if msg == WM_DESTROY:
                     _PostQuitMessage(0)
