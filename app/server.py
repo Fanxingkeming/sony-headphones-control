@@ -508,6 +508,66 @@ def bt_candidates():
             "devices": out}
 
 
+def a2dp_bridge_status():
+    """Detect the open-source A2DP Windows Bridge, nothing more.
+
+    Windows ships SBC/AAC only and exposes no plug-in point for a third-party
+    A2DP encoder, so this panel cannot give the headset LDAC by itself. The
+    honest thing it can do is report whether a bridge that *does* provide LDAC
+    is installed. Read-only: install records and the documented folders.
+    """
+    info = {"installed": False, "path": "", "version": ""}
+    if os.name != "nt":
+        return info
+    try:
+        import winreg
+    except Exception:
+        return info
+
+    keys = [
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_CURRENT_USER,
+         r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ]
+    for root, path in keys:
+        try:
+            with winreg.OpenKey(root, path) as k:
+                for i in range(winreg.QueryInfoKey(k)[0]):
+                    try:
+                        with winreg.OpenKey(k, winreg.EnumKey(k, i)) as sub:
+                            def val(name):
+                                try:
+                                    return str(winreg.QueryValueEx(sub, name)[0])
+                                except OSError:
+                                    return ""
+                            label = val("DisplayName")
+                            if not label or "a2dp" not in label.lower():
+                                continue
+                            info["installed"] = True
+                            info["version"] = val("DisplayVersion") or info["version"]
+                            info["path"] = (val("InstallLocation")
+                                            or val("DisplayIcon") or info["path"])
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+
+    if not info["installed"]:
+        cands = [
+            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "A2DPWB"),
+            os.path.join(os.environ.get("PROGRAMFILES", ""), "A2DPWB"),
+            os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "A2DPWB"),
+        ]
+        for d in cands:
+            if d and os.path.isfile(os.path.join(d, "a2dpwb.exe")):
+                info.update(installed=True, path=d)
+                break
+    return info
+
+
 def _online_keys(rows):
     """Known Bluetooth devices that map onto our two supported models.
 
@@ -1186,6 +1246,12 @@ class Handler(BaseHTTPRequestHandler):
                     pass
                 res = bt_candidates()
             self._json(res)
+            return
+        if p == "/api/ldac":
+            # Read-only capability check for the LDAC row in the sound card.
+            # The panel never installs or injects a codec; it only reports what
+            # the machine already has, plus the codec the headset reports.
+            self._json({"ok": True, "bridge": a2dp_bridge_status()})
             return
         if p == "/api/devices":
             # Legacy/debug endpoint: the panel itself only ever uses /api/context.

@@ -155,6 +155,17 @@ html:not([data-theme="dark"]) .ico-sun{display:none}
 }
 .bt-row .btn.small{padding:3px 8px;font-size:11px}
 .bt-row select:focus{border-color:var(--primary)}
+/* LDAC row: the headset only advertises a preference, Windows supplies the
+   codec, so the row states what is actually negotiated and explains the rest. */
+.ldac-note{
+  border-top:1px solid var(--line2);margin-top:7px;padding-top:8px;
+  font-size:11px;line-height:1.65;color:var(--ink2);
+}
+.ldac-note p{margin:0 0 3px}
+.ldac-note p:last-child{margin-bottom:0}
+.ldac-note .ldac-bridge{color:var(--muted);margin-bottom:5px}
+.ldac-note .ldac-bridge.on{color:var(--ok)}
+#ldacState.ok{color:var(--ok)}
 .mac-row{grid-column:1/-1;display:flex;align-items:center;gap:7px;border-top:1px solid var(--line2);padding-top:10px;margin-top:2px}
 .mac-row label{font-size:11.5px;color:var(--muted);white-space:nowrap}
 .mac-row input{

@@ -78,6 +78,25 @@ const EN = {
   "型号": "Model",
   "固件版本": "Firmware",
   "当前编解码": "Codec",
+  "LDAC 输出": "LDAC output",
+  "LDAC 已生效": "LDAC active",
+  "未生效": "Not active",
+  "说明": "Info",
+  "收起": "Hide",
+  "已检测到 A2DP Windows Bridge": "A2DP Windows Bridge detected",
+  "未检测到 A2DP Windows Bridge": "No A2DP Windows Bridge detected",
+  "Windows 只带 SBC 和 AAC，没有 LDAC 编码器，也不开放第三方编码器接口。":
+    "Windows ships SBC and AAC only. There is no LDAC encoder and no plug-in point for a third-party one.",
+  "改注册表或装普通驱动都不会让系统输出 LDAC。":
+    "Registry tweaks or an ordinary driver will not make Windows output LDAC.",
+  "「音质优先（LDAC）」只影响耳机侧偏好；源端不给 LDAC 时仍协商为 AAC。":
+    "\u201cSound quality first (LDAC)\u201d only sets the headset's preference; without an LDAC source it still negotiates AAC.",
+  "开源方案 A2DP Windows Bridge 需要一支专用 USB 蓝牙适配器，内置蓝牙不能这样接管。":
+    "The open-source A2DP Windows Bridge needs a dedicated USB Bluetooth adapter; the built-in radio cannot be taken over this way.",
+  "商业方案 Alternative A2DP Driver 可替换 A2DP 驱动，支持内置蓝牙。":
+    "The commercial Alternative A2DP Driver replaces the A2DP driver and works with the built-in radio.",
+  "本应用不下载驱动，也不修改系统蓝牙栈。":
+    "This app never downloads a driver or modifies the Bluetooth stack.",
   "协议": "Protocol",
   "机身颜色": "Colour",
   "颜色指令": "Colour command",
@@ -708,6 +727,41 @@ function render(){
   const lk = KEY_NAME[s.system.keys.left] || 'none';
   const rk = KEY_NAME[s.system.keys.right] || 'none';
   $('#keyLeft').value = lk; $('#keyRight').value = rk;
+
+  renderLdac();
+}
+
+/* ---------------- LDAC ----------------
+   "Sound quality first (LDAC)" is a headset-side preference. The codec itself
+   is negotiated by the Windows Bluetooth stack, which ships SBC/AAC only and
+   exposes no plug-in point for a third-party encoder. So this row reports what
+   was actually negotiated and explains the rest; it never installs anything. */
+let ldacBridge = null;
+
+function renderLdac(){
+  const el = $('#ldacState');
+  if (!el || !state) return;
+  const codec = (state.info && state.info.codec) || '?';
+  const on = codec === 'LDAC';
+  el.textContent = on ? t('LDAC 已生效') : t('未生效') + ' · ' + codec;
+  el.classList.toggle('ok', on);
+}
+
+async function loadLdac(){
+  try {
+    const j = await api('/api/ldac', null, 5000);
+    ldacBridge = j.bridge || null;
+  } catch(e){ ldacBridge = null; }
+  const el = $('#ldacBridge');
+  if (!el) return;
+  if (ldacBridge && ldacBridge.installed) {
+    el.textContent = t('已检测到 A2DP Windows Bridge') +
+      (ldacBridge.version ? ' ' + ldacBridge.version : '');
+    el.classList.add('on');
+  } else {
+    el.textContent = t('未检测到 A2DP Windows Bridge');
+    el.classList.remove('on');
+  }
 }
 
 /* ---------------- actions ---------------- */
@@ -810,6 +864,14 @@ function bind(){
   $('#btnTheme').onclick = () => chooseTheme(
     document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 
+  $('#btnLdacInfo').onclick = () => {
+    const note = $('#ldacNote'), btn = $('#btnLdacInfo');
+    const willOpen = note.classList.contains('hidden');
+    note.classList.toggle('hidden', !willOpen);
+    btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    btn.textContent = willOpen ? t('收起') : t('说明');
+  };
+
   $('#btPick').onchange = async () => {
     const mac = $('#btPick').value;
     if (!mac) return;
@@ -904,6 +966,7 @@ function bind(){
   bind();
   watchLanguage();
   preloadPhotos();
+  loadLdac();                          // capability probe, not on the RFCOMM path
   progress(true);
   try {
     await loadContext();

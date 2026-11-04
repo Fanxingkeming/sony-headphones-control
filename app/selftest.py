@@ -264,6 +264,30 @@ def _picker_wired():
             and "async function bindDevice(" in js)
 
 
+def _ldac_probe_shape():
+    """The LDAC row is fed by a read-only probe, so it must never raise.
+
+    Windows has no third-party A2DP encoder hook, so the panel only reports
+    whether a bridge is installed; on a clean machine that is simply False.
+    """
+    res = srv.a2dp_bridge_status()
+    return (isinstance(res, dict)
+            and {"installed", "path", "version"} <= set(res)
+            and isinstance(res["installed"], bool)
+            and isinstance(res["path"], str))
+
+
+def _ldac_row_wired():
+    """The sound card must carry the LDAC row and its explanation, and the
+    text must promise no driver installation."""
+    js = open(os.path.join(srv.ROOT, "app.js"), encoding="utf-8").read()
+    html = open(os.path.join(srv.ROOT, "index.html"), encoding="utf-8").read()
+    return ('id="ldacState"' in html and 'id="ldacNote"' in html
+            and 'id="btnLdacInfo"' in html
+            and "'/api/ldac'" in js and "function renderLdac(" in js
+            and "本应用不下载驱动" in html)
+
+
 def _table_suffixes_only():
     table = _photo_table()
     suffixes = set(v[2] for v in lb.MODEL_COLORS.values() if v[2])
@@ -438,6 +462,8 @@ def main():
         ("battery watch sends one command", _battery_tick_light()),
         ("bt candidates answer without a radio", _bt_candidates_shape()),
         ("panel offers the device picker", _picker_wired()),
+        ("ldac probe answers read-only", _ldac_probe_shape()),
+        ("sound card carries the ldac row", _ldac_row_wired()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)

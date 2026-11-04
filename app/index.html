@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sony Headphones Control Panel</title>
+<title>Headphones Control Panel</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="stylesheet" href="/style.css">
 </head>
@@ -13,7 +13,7 @@
   <div class="brand">
     <img class="brand-logo" src="/assets/sony-logo.svg" alt="SONY" title="SONY">
     <div>
-      <div class="brand-title">Sony Headphones</div>
+      <div class="brand-title">Headphones</div>
       <div class="brand-sub">Control Panel · MDR Protocol · 非官方工具</div>
     </div>
   </div>
@@ -124,6 +124,19 @@
         <option value="hifi">音质优先（LDAC）</option>
         <option value="stable">稳定连接优先</option>
       </select>
+    </div>
+    <div class="row split" id="ldacRow">
+      <div><label class="lbl">LDAC 输出</label><span class="hint" id="ldacState">检测中…</span></div>
+      <button class="btn ghost small" id="btnLdacInfo" aria-expanded="false">说明</button>
+    </div>
+    <div class="ldac-note hidden" id="ldacNote">
+      <p class="ldac-bridge" id="ldacBridge">未检测到 A2DP Windows Bridge</p>
+      <p>Windows 只带 SBC 和 AAC，没有 LDAC 编码器，也不开放第三方编码器接口。</p>
+      <p>改注册表或装普通驱动都不会让系统输出 LDAC。</p>
+      <p>「音质优先（LDAC）」只影响耳机侧偏好；源端不给 LDAC 时仍协商为 AAC。</p>
+      <p>开源方案 A2DP Windows Bridge 需要一支专用 USB 蓝牙适配器，内置蓝牙不能这样接管。</p>
+      <p>商业方案 Alternative A2DP Driver 可替换 A2DP 驱动，支持内置蓝牙。</p>
+      <p>本应用不下载驱动，也不修改系统蓝牙栈。</p>
     </div>
     <div class="row split" id="voiceRow">
       <div><label class="lbl">通知和语音向导</label><span class="hint" id="voiceHint">Table#2</span></div>
