@@ -55,7 +55,13 @@
       <div class="dev-photo-wrap">
         <img class="dev-photo hidden" id="devPhoto" alt="当前耳机">
       </div>
-      <div class="mac-row">
+      <div class="bt-row">
+        <label for="btPick">蓝牙设备</label>
+        <select id="btPick" title="选择要控制的耳机（自动从已配对的蓝牙设备中识别）"></select>
+        <button class="btn ghost small" id="btnBtScan" title="重新扫描已配对的蓝牙设备">扫描</button>
+        <button class="btn ghost small" id="btnBtManual" title="设备改名或未识别时，手动填写 MAC">手动</button>
+      </div>
+      <div class="bt-row mac-row hidden" id="macRow">
         <label for="macInput">蓝牙 MAC</label>
         <input id="macInput" spellcheck="false" placeholder="AA:BB:CC:DD:EE:FF">
         <button class="btn small" id="btnMac">保存并重连</button>

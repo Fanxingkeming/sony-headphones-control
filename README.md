@@ -83,16 +83,22 @@ set SHC_PFX_PASSWORD=...
 python app/sign.py
 ```
 
-### 指定耳机 MAC
+### 蓝牙设备识别（不用填 MAC）
 
-仓库里**不含任何真实 MAC**。三种方式任选：
+仓库里**不含任何真实 MAC**，正常使用也不需要手动填写：
 
-1. 面板里的「蓝牙 MAC」输入框，填完点「保存并重连」
-2. 编辑 `%LOCALAPPDATA%\SonyHeadphonesControl\config.json`（源码模式是 `app/config.json`）
-3. 命令行工具用环境变量：`set SONY_MAC=AA:BB:CC:DD:EE:FF`
+1. **自动识别**：启动时扫描 Windows 已配对的蓝牙设备，按型号名（`WH-1000XM4` /
+   `LinkBuds S`）匹配并写回 `config.json`。删掉配置再启动也能自己接上。
+2. **下拉框选择**：面板「设备概览」底部的「蓝牙设备」列出所有已配对的音频设备，
+   显示为 `WH-1000XM4 · 已连接` 这样。点另一副就是切过去，不必知道地址。
+3. **手动**：只有设备被改过名、或同时存在多个同名设备时才需要 —— 点「手动」填 17 位地址。
 
-首次运行时，程序会扫描 Windows 已配对的蓝牙设备，按型号名自动匹配并写回配置；
-匹配不到就在面板里手动填。
+命令行工具用环境变量：`set SONY_MAC=AA:BB:CC:DD:EE:FF`
+
+匹配逻辑在 `app/server.py`：先按 MAC 精确匹配，再按名称提示（`NAME_HINTS`）。Windows 常为
+同一副耳机缓存多个条目（`WH-1000XM4` 与 `LE_WH-1000XM4`），此时优先取「已连接」的那条；
+仍有歧义就**不猜**，留给下拉框。只有 Class of Device 属于音频设备（major class `0x04`）
+的条目才会出现在列表里，鼠标键盘不会混进来。
 
 ## 项目结构
 

@@ -238,6 +238,32 @@ def _battery_tick_light():
         srv.CURRENT["key"], srv.SESSION.client, srv.SESSION.key = prev
 
 
+def _bt_candidates_shape():
+    """The picker endpoint must be safe to call with or without a radio.
+
+    On a machine with no Bluetooth adapter bt.scan() reports unavailable; the
+    endpoint still has to answer with an empty list rather than raise, because
+    the panel calls it unconditionally on load.
+    """
+    res = srv.bt_candidates()
+    if not (res.get("ok") and isinstance(res.get("devices"), list)):
+        return False
+    for d in res["devices"]:
+        if not {"mac", "name", "connected", "remembered",
+                "audio", "guess", "owner"} <= set(d):
+            return False
+    return True
+
+
+def _picker_wired():
+    """The panel must offer the picker and the first-run auto-adopt path."""
+    js = open(os.path.join(srv.ROOT, "app.js"), encoding="utf-8").read()
+    html = open(os.path.join(srv.ROOT, "index.html"), encoding="utf-8").read()
+    return ('id="btPick"' in html and 'id="btnBtScan"' in html
+            and "'/api/bt'" in js and "function autoBind(" in js
+            and "async function bindDevice(" in js)
+
+
 def _table_suffixes_only():
     table = _photo_table()
     suffixes = set(v[2] for v in lb.MODEL_COLORS.values() if v[2])
@@ -408,6 +434,8 @@ def main():
         ("v2 skips the extra model round trip", _v2_skips_model_read()),
         ("log lines carry a timestamp", _log_stamped()),
         ("battery watch sends one command", _battery_tick_light()),
+        ("bt candidates answer without a radio", _bt_candidates_shape()),
+        ("panel offers the device picker", _picker_wired()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)

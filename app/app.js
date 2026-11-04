@@ -171,6 +171,81 @@ function renderDevice(ctx){
   setPhoto(device, ctx.color);
 }
 
+/* ---------------- Bluetooth device picker ---------------- */
+/* The address itself is an implementation detail: Windows already knows which
+   headsets are paired, so the panel lists them and the user clicks one. */
+const BT_MODEL = { xm4: 'WH-1000XM4', ls900n: 'LinkBuds S' };
+let btScan = { devices: [] };
+
+function btOptionLabel(d){
+  const name = d.name || d.mac;
+  const model = BT_MODEL[d.guess || d.owner] || '';
+  const state = d.connected ? '已连接' : (d.remembered ? '已配对' : '未配对');
+  const parts = [name];
+  if (model && model.toLowerCase() !== name.toLowerCase()) parts.push(model);
+  parts.push(state);
+  return parts.join(' · ');
+}
+
+function renderBt(j){
+  btScan = j || { devices: [] };
+  const sel = $('#btPick');
+  if (!sel) return;
+  const cur = (context && context.device && context.device.mac) || '';
+  const list = (btScan.devices || []).filter(d => d.audio || d.guess || d.owner);
+  const html = list.map(d =>
+    `<option value="${esc(d.mac)}">${esc(btOptionLabel(d))}</option>`);
+  // Keep the saved address selectable even when the headset is switched off,
+  // otherwise the picker would look empty exactly when nothing is nearby.
+  if (cur && !list.some(d => d.mac === cur)) {
+    html.unshift(`<option value="${esc(cur)}">${esc(cur)} · 已保存（当前不在附近）</option>`);
+  }
+  if (!html.length) {
+    html.push('<option value="">未发现已配对的蓝牙设备</option>');
+  }
+  sel.innerHTML = html.join('');
+  if (cur) sel.value = cur;
+  if (!btScan.available && btScan.error) {
+    sel.title = '蓝牙扫描不可用：' + btScan.error;
+  }
+}
+
+async function loadBt(force){
+  try {
+    const j = await api('/api/bt' + (force ? '?scan=1' : ''), null, 8000);
+    renderBt(j);
+    return j;
+  } catch (e) {
+    return null;
+  }
+}
+
+/* Save the address for a model and immediately probe that model. */
+async function bindDevice(key, mac){
+  await api('/api/config', {device: key, mac});
+  const j = await api('/api/context?force=1&device=' + encodeURIComponent(key),
+                      null, 30000);
+  renderDevice(j);
+  $('#macInput').value = mac;
+  return j;
+}
+
+/* First run: a saved address exists for nobody, but Windows knows the headset.
+   Adopt it only when exactly one scanned device matches the model we are
+   showing, so a renamed or ambiguous device never gets auto-assigned. */
+async function autoBind(){
+  if (!context || !context.device || context.device.mac) return false;
+  const same = (btScan.devices || []).filter(d => d.guess === device);
+  if (same.length !== 1) return false;
+  try {
+    await bindDevice(device, same[0].mac);
+    toast('已自动识别 ' + (same[0].name || same[0].mac));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function photoCandidates(id, color){
   // The headset reports its own ModelColor in 04 03; map it to the matching
   // render. A colourway we have no render for is probed as <id>_<suffix>,
@@ -391,6 +466,7 @@ async function doSwitch(){
   try {
     const j = await api('/api/switch', {});
     renderDevice(j.context || j);
+    loadBt();                          // the picker follows the active headset
     await loadStatus();
     toast('当前耳机：' + context.device.name);
   } catch(e) {
@@ -439,13 +515,52 @@ function bind(){
   $('#btnTheme').onclick = () => chooseTheme(
     document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 
+  $('#btPick').onchange = async () => {
+    const mac = $('#btPick').value;
+    if (!mac) return;
+    const hit = (btScan.devices || []).find(d => d.mac === mac);
+    // Clicking a device that looks like the other model means "control that
+    // one", which is exactly what the single-device view is for.
+    const target = (hit && hit.guess) || device;
+    progress(true);
+    try {
+      await bindDevice(target, mac);
+      await loadStatus(true);
+      toast('已切换到 ' + (target === 'xm4' ? 'WH-1000XM4' : 'LinkBuds S'));
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      progress(false);
+    }
+  };
+
+  $('#btnBtScan').onclick = async () => {
+    progress(true);
+    try {
+      const j = await loadBt(true);
+      toast(j && j.devices.length
+        ? `发现 ${j.devices.filter(d => d.audio || d.guess).length} 台音频设备`
+        : '没有发现已配对的蓝牙设备');
+    } finally {
+      progress(false);
+    }
+  };
+
+  $('#btnBtManual').onclick = () => {
+    const row = $('#macRow');
+    row.classList.toggle('hidden');
+    if (!row.classList.contains('hidden')) $('#macInput').focus();
+  };
+
   $('#btnMac').onclick = async () => {
     const mac = $('#macInput').value.trim().toUpperCase();
     busy(true, '正在保存配置…');
     try {
       await api('/api/config', {device, mac});
+      $('#macRow').classList.add('hidden');
       toast('MAC 已保存，正在重新连接');
       await loadStatus();
+      await loadBt();
     } catch(e){ toast(e.message, true); busy(false); }
   };
 
@@ -485,6 +600,14 @@ function bind(){
     banner('<b>后端未就绪。</b> ' + esc(e.message), true);
     progress(false);
     return;
+  }
+  if (!context || !context.device.mac) {
+    // Nothing saved yet: ask Windows what is paired and adopt it when the
+    // answer is unambiguous, so a first run needs no typing at all.
+    await loadBt();
+    if (await autoBind()) await loadStatus(true);
+  } else {
+    loadBt();                          // populate the picker in the background
   }
   await loadStatus();
   if (qs.get('switch') === '1') {

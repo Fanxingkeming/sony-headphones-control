@@ -463,6 +463,51 @@ def _bt_rows():
         return []
 
 
+AUDIO_MAJOR = 0x04                     # Class of Device major class
+
+
+def bt_candidates():
+    """Bluetooth devices the panel can offer, best guess first.
+
+    The picker in the UI is fed from here: the user clicks a device instead of
+    typing a 17-character address. `guess` is the model the name points at
+    (None when the name was changed or the device is something else), and
+    `audio` filters out phones, mice and the like by Class of Device.
+    """
+    try:
+        s = bt.scan()
+    except Exception as e:
+        return {"ok": True, "available": False, "probe": "error",
+                "error": str(e), "devices": []}
+    rows = s.get("devices", []) if s.get("available") else []
+    out = []
+    for r in rows:
+        name = (r.get("name") or "").strip()
+        low = name.lower()
+        guess = None
+        for key, hints in NAME_HINTS.items():
+            if any(h in low for h in hints):
+                guess = key
+                break
+        owner = None
+        for key, dev in DEVICES.items():
+            if dev["mac"] and dev["mac"].upper() == r["mac"].upper():
+                owner = key
+                break
+        out.append({
+            "mac": r["mac"], "name": name,
+            "connected": bool(r.get("connected")),
+            "remembered": bool(r.get("remembered")),
+            "audio": ((int(r.get("cod") or 0) >> 8) & 0x1F) == AUDIO_MAJOR,
+            "guess": guess, "owner": owner,
+        })
+    out.sort(key=lambda d: (d["guess"] is None, not d["audio"],
+                            not d["connected"], (d["name"] or d["mac"]).lower()))
+    return {"ok": True, "available": bool(s.get("available")),
+            "probe": s.get("probe", ""), "error": s.get("error", ""),
+            "devices": out}
+
+
 def _online_keys(rows):
     """Known Bluetooth devices that map onto our two supported models.
 
@@ -481,6 +526,14 @@ def _online_keys(rows):
             connected = [r for r in rows
                          if any(h in (r.get("name") or "").lower() for h in hints)
                          and (r.get("connected") or r.get("remembered"))]
+            if len(connected) > 1:
+                # Windows keeps one cached entry per profile, so the same
+                # headset often appears twice ("WH-1000XM4" and "LE_WH-1000XM4").
+                # Prefer the entry that is actually connected; if that is still
+                # ambiguous, do not guess.
+                live = [r for r in connected if r.get("connected")]
+                if len(live) == 1:
+                    connected = live
             if len(connected) == 1:
                 hit = connected[0]
         if hit is None:
@@ -1118,6 +1171,18 @@ class Handler(BaseHTTPRequestHandler):
                 force=q.get("force", ["0"])[0] == "1",
                 quiet=q.get("quiet", ["0"])[0] == "1")
             self._json(ctx)
+            return
+        if p == "/api/bt":
+            # Feeds the device picker: the user clicks a headset instead of
+            # typing its address. `scan=1` bypasses the 2 s scan cache.
+            res = bt_candidates()
+            if q.get("scan", ["0"])[0] == "1":
+                try:
+                    bt.scan(force=True)
+                except Exception:
+                    pass
+                res = bt_candidates()
+            self._json(res)
             return
         if p == "/api/devices":
             # Legacy/debug endpoint: the panel itself only ever uses /api/context.
