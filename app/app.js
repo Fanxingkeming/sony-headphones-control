@@ -14,6 +14,58 @@ const THEME_KEY = 'shcp.theme';
 const mediaDark = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
 let themeExplicit = false;
 
+/* ---- dynamic colour: the panel tints itself after the headset ----
+   A tiny M3-style tonal palette generator. The headset reports its ModelColor
+   enum (04 03); we map it to a seed hue and repaint the primary/secondary
+   roles. Neutral roles (surfaces, outlines) stay untouched. */
+const SEED_DEFAULT = '#4159b4';
+let lastSeed = SEED_DEFAULT;
+
+function hexToHsl(hex){
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  let h = 0, s = 0;
+  if (mx !== mn) {
+    const d = mx - mn;
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return [h, s * 100];
+}
+
+function seedForStatus(s, device){
+  const en = ((s.info && s.info.color && s.info.color.enum) || '').toUpperCase();
+  if (en.includes('WHITE')) return '#a39a86';
+  if (en.includes('CREAM') || en.includes('BEIGE') || en.includes('GOLD')) return '#a08a5e';
+  if (en.includes('SILVER') || en.includes('PLATINUM')) return '#64708a';
+  if (en.includes('BLUE')) return '#4a6da7';
+  if (en.includes('BLACK') || en.includes('GRAPHITE')) return '#565f75';
+  return device === 'ls900n' ? '#4a6da7' : '#565f75';
+}
+
+function applyPalette(){
+  const dark = document.documentElement.dataset.theme === 'dark';
+  const [h, s0] = hexToHsl(lastSeed);
+  const s = Math.round(Math.min(64, Math.max(16, s0)));
+  const L  = (x) => 'hsl(' + h.toFixed(1) + ' ' + s + '% ' + x + '%)';
+  const Ls = (x) => 'hsl(' + h.toFixed(1) + ' ' + Math.round(s * 0.4) + '% ' + x + '%)';
+  const r = document.documentElement.style;
+  const set = (k, v) => r.setProperty(k, v);
+  if (dark) {
+    set('--primary', L(80));               set('--on-primary', L(18));
+    set('--primary-container', L(32));     set('--on-primary-container', L(90));
+    set('--secondary-container', Ls(30));  set('--on-secondary-container', Ls(88));
+  } else {
+    set('--primary', L(42));               set('--on-primary', '#ffffff');
+    set('--primary-container', L(90));     set('--on-primary-container', L(14));
+    set('--secondary-container', Ls(90));  set('--on-secondary-container', Ls(22));
+  }
+}
+
 function systemTheme(){
   return (mediaDark && mediaDark.matches) ? 'dark' : 'light';
 }
@@ -21,6 +73,7 @@ function systemTheme(){
 function applyTheme(t, remember){
   const theme = (t === 'dark') ? 'dark' : 'light';
   document.documentElement.dataset.theme = theme;
+  applyPalette();
   if (remember) {
     themeExplicit = true;
     try { localStorage.setItem(THEME_KEY, theme); } catch(e){}
@@ -652,10 +705,14 @@ function render(){
   // overview
   $('#ov-sub').textContent = s.name + ' · ' + maskMac(s.mac);
   $('#ov-proto').textContent = 'MDR ' + s.protocol.toUpperCase();
+  // repaint the accent colours once the headset's own colour is known
+  lastSeed = seedForStatus(s, device);
+  applyPalette();
   const bm = hasVal(s.battery.main) ? s.battery.main : null;
   $('#bat-main').textContent = bm === null ? '--' : bm;
   const bar = $('#bat-bar');
   bar.style.width = (bm === null ? 0 : bm) + '%';
+  bar.parentElement.style.setProperty('--pct', bm === null ? 0 : bm);
   bar.classList.toggle('low', bm !== null && bm < 20);
   const bd = [];
   if (hasVal(s.battery.left)) bd.push('左 ' + s.battery.left + '%');
@@ -684,13 +741,14 @@ function render(){
   $('#focusSw').checked = !!s.anc.focus;
   $('.cap-wind').classList.toggle('hidden', !has('wind'));
 
-  // EQ
+  // EQ - presets as a chip row (the generic [data-action] click handler
+  // dispatches them, so no extra wiring is needed).
   const eqList = v1 ? EQ_V1 : EQ_V2;
   const curPreset = eqList.indexOf(s.eq.preset) >= 0 ? s.eq.preset : 'custom';
-  $('#eqPreset').innerHTML = eqList.map(k =>
-    `<option value="${k}">${esc(EQ_LABEL[k]||k)}</option>`).join('') +
-    (curPreset === 'custom' ? '<option value="custom">自定义</option>' : '');
-  $('#eqPreset').value = curPreset;
+  const eqChips = (curPreset === 'custom' ? eqList.concat(['custom']) : eqList);
+  $('#eqPreset').innerHTML = eqChips.map(k =>
+    `<button type="button" class="eqchip${k === curPreset ? ' active' : ''}"` +
+    ` data-action="eq_preset" data-value="${k}">${esc(EQ_LABEL[k]||k)}</button>`).join('');
   $('#eqPresetLabel').textContent = EQ_LABEL[curPreset] || curPreset;
   $('#eqbands').innerHTML = s.eq.bands.map((v,i) =>
     `<div class="eqband">
@@ -1011,6 +1069,22 @@ function bind(){
     if (!document.hidden) idleRefresh();
   });
   window.addEventListener('focus', idleRefresh);
+
+  // M3 ripple on pressable controls (skipped when the OS wants less motion).
+  document.addEventListener('pointerdown', (e) => {
+    const t = e.target.closest('.btn, .segmented button, .eqchip');
+    if (!t || t.disabled) return;
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const r = t.getBoundingClientRect();
+    const d = Math.max(r.width, r.height) * 2.2;
+    const sp = document.createElement('span');
+    sp.className = 'ripple';
+    sp.style.width = sp.style.height = d + 'px';
+    sp.style.left = (e.clientX - r.left - d / 2) + 'px';
+    sp.style.top = (e.clientY - r.top - d / 2) + 'px';
+    t.appendChild(sp);
+    sp.addEventListener('animationend', () => sp.remove());
+  });
 
   // If the headset is turned off and another one takes over, follow it.
   setInterval(async () => {

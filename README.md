@@ -68,7 +68,7 @@ Chinese-only; the interface chrome is translated.
 
 ## 下载
 
-当前版本 **v1.0.0**，见 [Releases](https://github.com/Fanxingkeming/sony-headphones-control/releases)。
+当前版本 **v1.1.0**，见 [Releases](https://github.com/Fanxingkeming/sony-headphones-control/releases)。
 
 - `SonyHeadphonesControl.exe` — 单文件、约 3.3 MiB、免安装、无第三方运行时依赖
 - 发布的 exe **不包含 Sony 的产品渲染图与 Sound Connect 应用图标**（版权原因，见
