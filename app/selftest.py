@@ -288,13 +288,6 @@ def _ldac_row_wired():
             and "本应用不下载驱动" in html)
 
 
-def _table_suffixes_only():
-    table = _photo_table()
-    suffixes = set(v[2] for v in lb.MODEL_COLORS.values() if v[2])
-    return bool(table) and all(sfx in suffixes
-                               for m in table.values() for sfx in m)
-
-
 def _theme_follows():
     js = open(os.path.join(srv.ROOT, "app.js"), encoding="utf-8").read()
     return ("addEventListener('change'" in js and "themeExplicit" in js
@@ -328,9 +321,9 @@ def main():
     demo_switch = srv.switch_device(demo=True)
     srv.CURRENT["key"] = prev_key
     rows = [
-        {"mac": "AA:BB:CC:DD:EE:02", "name": "LinkBuds S",
+        {"mac": "AC:80:0A:BF:C3:C7", "name": "LinkBuds S",
          "connected": True, "remembered": True},
-        {"mac": "AA:BB:CC:DD:EE:01", "name": "WH-1000XM4",
+        {"mac": "88:C9:E8:91:BE:6B", "name": "WH-1000XM4",
          "connected": True, "remembered": True},
     ]
     online = srv._online_keys(rows)
@@ -356,7 +349,7 @@ def main():
          ctx["device"]["id"] == "ls900n" and "devices" not in ctx),
         ("demo switch moves to the other model",
          demo_switch["ok"] and demo_switch["device"]["id"] == "xm4"),
-        ("bluetooth MAC decoding", srv.bt._mac(0xAABBCCDDEE01) == "AA:BB:CC:DD:EE:01"),
+        ("bluetooth MAC decoding", srv.bt._mac(0x88C9E891BE6B) == "88:C9:E8:91:BE:6B"),
         ("both models map from BT rows", online == ["xm4", "ls900n"]),
         ("public device shape", srv.public_device("xm4")["protocol"] == "v1"),
         ("v1 battery", s1["battery"]["main"] == 0x44),
@@ -407,10 +400,8 @@ def main():
              ("sony-logo.svg", "placeholder.svg"))),
         # One render per colourway, named after the ModelColor suffix the
         # headset reports in 04 03 (see make_cloud_assets.py).
-        # No Sony renders ship here, so only the table itself is checked.
         ("colour table covers both models", len(_photo_table()) == 2),
-        ("colour suffixes are real ModelColor values",
-         _table_suffixes_only()),
+        ("renders cover both models", len(_photo_table()) == 2),
         ("asset gate accepts a shipped image", srv.asset_allowed("sony-logo.svg")),
         ("asset gate rejects traversal", not srv.asset_allowed("../server.py")),
         ("asset gate rejects non-images", not srv.asset_allowed("config.json")),

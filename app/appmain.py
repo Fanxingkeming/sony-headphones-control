@@ -15,7 +15,7 @@ import time
 import server as srv
 import tray
 
-VERSION = "1.1"
+VERSION = "1.3.1"
 PREFS_NAME = "prefs.json"
 PORT_NAME = "port.json"
 
@@ -108,6 +108,7 @@ class App:
         self.data = tray.data_dir()
         self.prefs_path = os.path.join(self.data, PREFS_NAME)
         self.port_path = os.path.join(self.data, PORT_NAME)
+        self._last_tip = None
         self.prefs = {"device": "xm4", "menu_px": 13}
         try:
             with open(self.prefs_path, encoding="utf-8") as f:
@@ -230,15 +231,39 @@ class App:
             if time.monotonic() >= next_tick:
                 next_tick = time.monotonic() + 600
                 try:
-                    srv.battery_tick()
+                    lv = srv.battery_tick()
+                    if isinstance(lv, int):
+                        self.tray.set_battery(lv)
                 except Exception:
                     pass
+            try:
+                # Panel polls keep the cached snapshot fresh; mirror it onto
+                # the tray icon dot and the hover tip.
+                st = srv.STATUS_CACHE.get("state") or {}
+                batt = (st.get("battery") or {}).get("main")
+                self.tray.set_battery(batt if isinstance(batt, int) else None)
+                self._sync_tip()
+            except Exception:
+                pass
             time.sleep(2)
 
     def _sync_tip(self):
-        if self.tray:
-            d = srv.DEVICES[self.current_key()]
-            self.tray.set_tip("Sony 耳机 · %s · :%d" % (d["short"], self.port))
+        if not self.tray:
+            return
+        d = srv.DEVICES[self.current_key()]
+        tip = "Sony 耳机 · %s · :%d" % (d["short"], self.port)
+        # Battery rides in the cached status snapshot when the panel has read
+        # it at least once; show it so a hover answers "how much is left".
+        try:
+            st = srv.STATUS_CACHE.get("state") or {}
+            batt = (st.get("battery") or {}).get("main")
+            if isinstance(batt, int):
+                tip += " · %d%%" % batt
+        except Exception:
+            pass
+        if tip != self._last_tip:
+            self._last_tip = tip
+            self.tray.set_tip(tip)
 
     # -- lifecycle ---------------------------------------------------------
     def start(self):

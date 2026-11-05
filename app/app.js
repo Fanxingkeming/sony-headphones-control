@@ -17,9 +17,16 @@ let themeExplicit = false;
 /* ---- dynamic colour: the panel tints itself after the headset ----
    A tiny M3-style tonal palette generator. The headset reports its ModelColor
    enum (04 03); we map it to a seed hue and repaint the primary/secondary
-   roles. Neutral roles (surfaces, outlines) stay untouched. */
+   roles. Neutral roles (surfaces, outlines) stay untouched. An explicit
+   "signature" accent (Sony black & gold) overrides the device colour. */
 const SEED_DEFAULT = '#4159b4';
+const SEED_SIGNATURE = '#c9a227';
+const ACCENT_KEY = 'shcp.accent';
 let lastSeed = SEED_DEFAULT;
+
+function accentMode(){
+  try { return localStorage.getItem(ACCENT_KEY) || 'auto'; } catch(e){ return 'auto'; }
+}
 
 function hexToHsl(hex){
   const n = parseInt(hex.slice(1), 16);
@@ -49,7 +56,8 @@ function seedForStatus(s, device){
 
 function applyPalette(){
   const dark = document.documentElement.dataset.theme === 'dark';
-  const [h, s0] = hexToHsl(lastSeed);
+  const seed = (accentMode() === 'signature') ? SEED_SIGNATURE : lastSeed;
+  const [h, s0] = hexToHsl(seed);
   const s = Math.round(Math.min(64, Math.max(16, s0)));
   const L  = (x) => 'hsl(' + h.toFixed(1) + ' ' + s + '% ' + x + '%)';
   const Ls = (x) => 'hsl(' + h.toFixed(1) + ' ' + Math.round(s * 0.4) + '% ' + x + '%)';
@@ -127,6 +135,24 @@ const EN = {
   "切换明暗主题": "Toggle light/dark theme",
   "重新读取所有状态": "Re-read every value",
   "设备概览": "Overview",
+  "关于": "About",
+  "版本与信息": "Version & info",
+  "版本": "Version",
+  "更新检查": "Update check",
+  "检查更新": "Check for updates",
+  "检查中…": "Checking…",
+  "已是最新": "Up to date",
+  "发现新版本": "New version available",
+  "前往下载": "Download",
+  "检查失败": "Check failed",
+  "日志": "Log",
+  "导出日志": "Export log",
+  "日志已导出": "Log exported",
+  "导出失败": "Export failed",
+  "开源": "Source",
+  "强调色：Sony 签名金": "Accent: Sony signature gold",
+  "强调色：跟随耳机颜色": "Accent: follow the headset colour",
+  "自动化": "Automation",
   "电量": "Battery",
   "型号": "Model",
   "固件版本": "Firmware",
@@ -152,7 +178,6 @@ const EN = {
     "This app never downloads a driver or modifies the Bluetooth stack.",
   "协议": "Protocol",
   "机身颜色": "Colour",
-  "颜色指令": "Colour command",
   "产品系列": "Series",
   "系列 / 颜色": "Series / colour",
   "头戴式 · 单电池": "Over-ear · single battery",
@@ -213,6 +238,7 @@ const EN = {
   "连接质量": "Connection quality",
   "音质优先（LDAC）": "Sound quality first (LDAC)",
   "稳定连接优先": "Stable connection first",
+  "写入后自动读回确认": "read back automatically after writing",
   "EQ · 6 段自定义": "EQ · 6-band custom",
   "归零": "Reset",
   "写入自定义 EQ": "Apply custom EQ",
@@ -299,6 +325,8 @@ const MSG_EN = [
   /* --- connection --- */
   [/^(.+)：connect 超时。确认耳机已开机、已从充电盒取出，且手机上的 Sound Connect 已完全退出。$/,
    '$1: connect timed out. Make sure the headset is on, out of the charging case, and that Sound Connect is closed on the phone.'],
+  [/^(.+)：connect 失败, (?:SO_ERROR|WSAError)=10048.*$/,
+   '$1: connect failed (SO_ERROR=10048) - the headset is held by another program: another instance on this PC, or Sound Connect on your phone. Close it and retry.'],
   [/^(.+)：connect 失败, SO_ERROR=(\d+)。.*$/,
    '$1: connect failed (SO_ERROR=$2). The headset is probably still held by the phone.'],
   [/^设备暂时不可达$/, 'Headset unreachable'],
@@ -426,6 +454,71 @@ const APO_V1 = [['off','关闭'],['5min','5 分钟'],['30min','30 分钟'],['1h'
   ['3h','3 小时'],['takenoff','取下耳机时']];
 const APO_V2 = [['off','关闭'],['takenoff','取下即关']];
 const BAND_LABELS = ['低音','1k','2.5k','4k','6.3k','10k'];
+
+/* Live curve for the custom EQ: one smooth path through the six band gains,
+   redrawn on every slider input (and after a preset/reset re-render). */
+function drawEqCurve(){
+  const svg = $('#eqcurve');
+  if (!svg) return;
+  const inputs = $$('.vslider input');
+  if (!inputs.length) { svg.classList.add('hidden'); return; }
+  svg.classList.remove('hidden');
+  const W = 300, H = 64, PAD = 10;
+  const pts = inputs.map((inp, i) => ({
+    x: PAD + i * (W - 2 * PAD) / (inputs.length - 1),
+    y: H / 2 - Number(inp.value) / 10 * (H / 2 - 4),
+  }));
+  // Catmull-Rom through the points, emitted as cubic beziers.
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i], p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  svg.innerHTML =
+    `<line class="eqc-zero" x1="${PAD}" y1="${H/2}" x2="${W-PAD}" y2="${H/2}"/>` +
+    `<path class="eqc-line" d="${d}"/>`;
+}
+
+/* Drag on the curve itself: the nearest band follows the pointer's height.
+   The SVG stretches with preserveAspectRatio="none", so band i sits at a
+   fixed fraction of the element width - mirror the PAD/spacing maths. */
+(function eqCurveDrag(){
+  const svg = $('#eqcurve');
+  if (!svg) return;
+  const W = 300, PAD = 10;
+  let dragging = false;
+  const apply = (clientX, clientY) => {
+    const inputs = $$('.vslider input');
+    if (!inputs.length) return;
+    const rect = svg.getBoundingClientRect();
+    const vx = (clientX - rect.left) / rect.width * W;
+    const step = (W - 2 * PAD) / (inputs.length - 1);
+    const i = Math.max(0, Math.min(inputs.length - 1,
+                                   Math.round((vx - PAD) / step)));
+    const t = 1 - (clientY - rect.top) / rect.height;        // 0..1, up = +10
+    const n = Math.max(-10, Math.min(10, Math.round((t - 0.5) * 2 * 10)));
+    const inp = inputs[i];
+    inp.value = n;
+    lastEqTouch = Date.now();
+    const v = $(`[data-bandval="${inp.dataset.band}"]`);
+    if (v) v.textContent = (n > 0 ? '+' : '') + n;
+    drawEqCurve();
+  };
+  svg.addEventListener('pointerdown', (e) => {
+    if (!$$('.vslider input').length) return;
+    dragging = true;
+    try { svg.setPointerCapture(e.pointerId); } catch(err){}
+    apply(e.clientX, e.clientY);
+    e.preventDefault();
+  });
+  svg.addEventListener('pointermove', (e) => { if (dragging) apply(e.clientX, e.clientY); });
+  svg.addEventListener('pointerup', () => { dragging = false; });
+  svg.addEventListener('pointercancel', () => { dragging = false; });
+})();
 const KEY_NAME = {0x10:'volume',0x20:'playback',0x35:'quick_ambient',0xff:'none'};
 const KEY_LABEL = {volume:'音量控制',playback:'播放控制',quick_ambient:'快速环境声',none:'无'};
 
@@ -531,10 +624,16 @@ function renderDevice(ctx){
     `<div class="devbadge-text"><b>${esc(d.name)}</b>` +
     `<small>MDR ${esc(d.protocol.toUpperCase())} · ${esc(maskMac(d.mac))}` +
     `${live ? ' ' + t('· 已连接') : ' ' + t('· 未连接')}</small></div>`;
-  $('#btnSwitch').classList.toggle('hidden', !(ctx.alternatives > 0));
-  $('#btnSwitch').title = ctx.alternatives > 0
-    ? '切换到另一副已连接的耳机' : '当前只检测到这一副耳机';
   setPhoto(device, ctx.color);
+  // Showcase tile brightness follows the body colour: light bodies
+  // (white/cream/silver) pop on the dark tile, dark bodies need the light
+  // one to stay visible. In light mode the tile is always light anyway.
+  const lightBody = ['w', 's', 'cream', 'gold', 'beige']
+    .includes(String(ctx.color || '').toLowerCase());
+  const wrap = document.querySelector('.dev-photo-wrap');
+  if (wrap) wrap.classList.toggle('tile-keep-light', !lightBody);
+  const verEl = $('#aboutVer');
+  if (verEl) verEl.textContent = 'v' + (ctx.version || '?');
 }
 
 /* ---------------- Bluetooth device picker ---------------- */
@@ -657,6 +756,8 @@ async function loadContext(force, quiet){
 
 /* ---------------- status ---------------- */
 let statusInFlight = false;
+let lastRenderState = null;   // JSON of the last rendered status snapshot
+let lastEqTouch = 0;          // a band slider was just dragged - don't fight it
 /* `silent` skips the progress bar and the error banner: used by the idle
    refresh below, where a once-a-minute flash would be worse than the stale
    value it is replacing. */
@@ -679,7 +780,6 @@ async function loadStatus(fresh, silent){
              ` <button class="btn small" id="bannerRetry">重试</button>`, true);
       const btn = $('#bannerRetry');
       if (btn) btn.onclick = () => loadStatus(true);
-      toast(e.message, true);
     }
   } finally {
     statusInFlight = false;
@@ -697,13 +797,21 @@ function render(){
   if (!state) return;
   const s = state, v1 = s.protocol === 'v1';
 
+  // The live-sync poll re-renders every few seconds; skip identical snapshots
+  // so nothing flickers, and yield for a moment after the user drags an EQ
+  // band (the DOM is rebuilt wholesale and would swallow the in-flight drag).
+  const j = JSON.stringify(s);
+  if (j === lastRenderState && Date.now() - lastEqTouch > 4000) return;
+  lastRenderState = j;
+
   // connection badge
   const dot = $('#dot');
   dot.className = 'dot ' + (s.connected ? 'on' : 'off');
   $('#conntext').textContent = s.connected ? '已连接' : '未连接';
 
-  // overview
-  $('#ov-sub').textContent = s.name + ' · ' + maskMac(s.mac);
+  // overview - the badge in the top bar already carries the (masked) MAC,
+  // so the card shows just the friendly name.
+  $('#ov-sub').textContent = s.name;
   $('#ov-proto').textContent = 'MDR ' + s.protocol.toUpperCase();
   // repaint the accent colours once the headset's own colour is known
   lastSeed = seedForStatus(s, device);
@@ -723,7 +831,6 @@ function render(){
               ['当前编解码', s.info.codec]];
   if (s.info.color) {
     kv.push(['机身颜色', s.info.color.label + ' · ' + s.info.color.enum]);
-    kv.push(['颜色指令', s.info.color.instruction]);
     if (s.info.color.series_name) kv.push(['产品系列', s.info.color.series_name]);
   } else if (s.info.series) {
     kv.push(['系列 / 颜色', s.info.series]);
@@ -739,7 +846,9 @@ function render(){
   $('#levelRange').value = s.anc.level;
   $('#levelVal').textContent = s.anc.level;
   $('#focusSw').checked = !!s.anc.focus;
-  $('.cap-wind').classList.toggle('hidden', !has('wind'));
+  // Wind-noise reduction only makes sense in ambient mode, so the row lives
+  // with the mode instead of being a stand-alone button.
+  $('.cap-wind').classList.toggle('hidden', !(has('wind') && s.anc.mode === 'ambient'));
 
   // EQ - presets as a chip row (the generic [data-action] click handler
   // dispatches them, so no extra wiring is needed).
@@ -760,12 +869,17 @@ function render(){
     const i = inp.dataset.band;
     const n = Number(inp.value);
     $(`[data-bandval="${i}"]`).textContent = (n>0?'+':'') + n;
+    lastEqTouch = Date.now();
+    drawEqCurve();
   }));
+  drawEqCurve();
 
   // sound
   $('#dseeSw').checked = !!s.sound.dsee;
   $('#qualitySel').value = s.sound.quality === 'stable' ? 'stable' : 'hifi';
-  $('#voiceHint').textContent = v1 ? 'v1 无读回 · 仅写入，请用 App 确认' : 'Table#2 · 00 = 开';
+  // Both models support LDAC (LinkBuds S is Sony's first Hi-Res TWS) - the
+  // LDAC row stays for everyone; only the wording differs per protocol.
+  $('#voiceHint').textContent = v1 ? t('v1 无读回 · 仅写入，请用 App 确认') : t('写入后自动读回确认');
   $('#voiceSw').checked = v1 ? uiVoice : !!s.sound.voice;
 
   // system
@@ -784,6 +898,8 @@ function render(){
   $('#touchSw').checked = !!s.system.touch;
   $('#multiSw').checked = !!s.system.multipoint;
   $('#multiSw').disabled = !!s.system.multipoint_ro;
+  $('#multiRow').classList.toggle('hidden',
+                                 !(has('multipoint') || has('multipoint_ro')));
   $('#multiRow').classList.toggle('readonly', !!s.system.multipoint_ro);
   $('#multiHint').textContent = s.system.multipoint_ro
     ? '只读 · 设备拒绝写入' : (v1 ? '写入后链路会断开重连' : '同时连接两台设备');
@@ -922,7 +1038,6 @@ function bind(){
     }
   };
 
-  $('#btnSwitch').onclick = doSwitch;
   $('#btnLang').textContent = LANG === 'en' ? '中' : 'EN';
   $('#btnLang').onclick = () => {
     try { localStorage.setItem(LANG_KEY, LANG === 'en' ? 'zh' : 'en'); } catch(e){}
@@ -932,8 +1047,85 @@ function bind(){
   $('#btnTheme').onclick = () => chooseTheme(
     document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 
-  $('#btnLdacInfo').onclick = () => {
-    const note = $('#ldacNote'), btn = $('#btnLdacInfo');
+  // Accent mode: follow the headset's colour, or lock a fixed "Sony
+  // signature" black & gold. The choice persists and survives theme flips.
+  $('#btnAccent').onclick = () => {
+    const next = accentMode() === 'signature' ? 'auto' : 'signature';
+    try { localStorage.setItem(ACCENT_KEY, next); } catch(e){}
+    applyPalette();
+    toast(next === 'signature'
+      ? t('强调色：Sony 签名金')
+      : t('强调色：跟随耳机颜色'));
+  };
+
+  // Keyboard shortcuts (ignored while typing in a field): 1/2/3 switch the
+  // noise modes, D toggles DSEE, R forces a re-read.
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (/INPUT|SELECT|TEXTAREA/.test(tag) || !state || acting) return;
+    const mode = {'1': 'nc', '2': 'ambient', '3': 'off'}[e.key];
+    if (mode && has('anc')) { act('anc_mode', mode); return; }
+    if ((e.key === 'd' || e.key === 'D') && has('dsee')) { act('dsee', !state.sound.dsee); return; }
+    if (e.key === 'r' || e.key === 'R') { loadStatus(true); }
+  });
+
+  // Update check straight from the browser: api.github.com sends CORS
+  // headers, so the panel can ask it without the server growing an HTTPS
+  // stack. Silent at start-up, loud only when a newer release exists.
+  const REPO = 'Fanxingkeming/sony-headphones-control';
+  function compareVer(a, b){
+    const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      const d = (pa[i] || 0) - (pb[i] || 0);
+      if (d) return d;
+    }
+    return 0;
+  }
+  async function checkUpdate(){
+    const el = $('#aboutUpdate');
+    if (!el) return;
+    el.textContent = t('检查中…');
+    try {
+      const r = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest',
+                            {headers: {Accept: 'application/vnd.github+json'}});
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const remote = String(j.tag_name || '').replace(/^v/, '');
+      const cur = (context && context.version) || '';
+      if (remote && cur && compareVer(remote, cur) > 0) {
+        el.innerHTML = '<b class="upd-new">' + esc(t('发现新版本 v' + remote)) +
+          '</b> · <a target="_blank" rel="noopener" href="https://github.com/' + REPO +
+          '/releases/latest">' + esc(t('前往下载')) + '</a>';
+      } else {
+        el.textContent = t('已是最新') + (remote ? '（远端 v' + remote + '）' : '');
+      }
+    } catch (e) {
+      el.textContent = t('检查失败') + ' (' + e.message + ')';
+    }
+  }
+  $('#btnCheckUpdate').onclick = checkUpdate;
+  checkUpdate();
+
+  // Export the raw-frame log as a JSON file download.
+  $('#btnLogExport').onclick = async () => {
+    try {
+      const j = await api('/api/log');
+      const blob = new Blob([JSON.stringify(j.items, null, 2)],
+                            {type: 'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'shcp-log-' +
+        new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast(t('日志已导出'));
+    } catch (e) {
+      toast(t('导出失败'), true);
+    }
+  };
+
+  $('#btnLdacInfo').onclick = () => {    const note = $('#ldacNote'), btn = $('#btnLdacInfo');
     const willOpen = note.classList.contains('hidden');
     note.classList.toggle('hidden', !willOpen);
     btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
@@ -1011,6 +1203,7 @@ function bind(){
   $('#btnEqReset').onclick = () => {
     $$('.vslider input').forEach(i => { i.value = 0; });
     $$('.vval').forEach(v => { v.textContent = '0'; });
+    drawEqCurve();
     act('eq_bands', [0,0,0,0,0,0]);
   };
   $('#btnKeys').onclick = () =>
@@ -1058,17 +1251,24 @@ function bind(){
     setTimeout(doSwitch, 400);        // tray "switch headset" opens this URL
   }
   // Nothing re-reads the values after the first load, so a panel left open
-  // shows a frozen battery/ANC state. Refresh slowly in the background, and
-  // immediately when the tab regains focus.
-  const idleRefresh = () => {
+  // shows a frozen battery/ANC state - and a change made on the headset
+  // itself (buttons, phone app) would take a minute to show up. While the
+  // headset answers, mirror it every 8 s; offline, back off to 30 s so a
+  // powered-off headset is not hammered with connect attempts. render()
+  // skips identical snapshots, so nothing flickers.
+  let lastPoll = 0;
+  const idleRefresh = (force) => {
     if (document.hidden || acting || statusInFlight) return;
+    const wait = (state && state.connected) ? 8000 : 30000;
+    if (!force && Date.now() - lastPoll < wait) return;
+    lastPoll = Date.now();
     loadStatus(false, true);
   };
-  setInterval(idleRefresh, 60000);
+  setInterval(idleRefresh, 2000);
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) idleRefresh();
+    if (!document.hidden) idleRefresh(true);
   });
-  window.addEventListener('focus', idleRefresh);
+  window.addEventListener('focus', () => idleRefresh(true));
 
   // M3 ripple on pressable controls (skipped when the OS wants less motion).
   document.addEventListener('pointerdown', (e) => {
@@ -1095,4 +1295,10 @@ function bind(){
       if (j.device.id !== device) { renderDevice(j); await loadStatus(); }
     } catch(e){ /* best-effort */ }
   }, 20000);
+
+  // PWA installability: a no-op service worker is enough for Edge/Chrome to
+  // offer "Install app", which gives the panel a chrome-less window.
+  if ('serviceWorker' in navigator && /^https?:\/\/(127\.0\.0\.1|localhost)/.test(location.origin)) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
 })();

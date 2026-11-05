@@ -1,0 +1,13 @@
+{
+  "name": "Headphones Control Panel",
+  "short_name": "Headphones",
+  "description": "Local control panel for Sony WH-1000XM4 and LinkBuds S over the MDR protocol.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111318",
+  "theme_color": "#111318",
+  "icons": [
+    { "src": "/assets/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

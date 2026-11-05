@@ -14,7 +14,6 @@ Sony WH-1000XM4 协议客户端（Windows / AF_BTH RFCOMM，无第三方依赖�
 
 用法: python tandem_client.py [MAC]
 """
-import os
 import ctypes, ctypes.wintypes as wt, struct, select, sys, time
 
 AF_BTH, BTHPROTO_RFCOMM, SOCK_STREAM = 32, 3, 1
@@ -138,7 +137,11 @@ class Client:
         addr = SOCKADDR_BTH(AF_BTH, int(mac.replace(":", ""), 16), guid, channel)
         rc = ws2.connect(s, ctypes.byref(addr), ctypes.sizeof(addr))
         if rc != 0 and ws2.WSAGetLastError() != 10035:
-            raise OSError(f"connect 失败, WSAError={ws2.WSAGetLastError()}")
+            wsaerr = ws2.WSAGetLastError()
+            if wsaerr == 10048:
+                raise OSError("connect 失败, WSAError=10048（耳机正被另一个程序占用："
+                              "可能是本机另一个实例，或手机上的 Sound Connect）")
+            raise OSError(f"connect 失败, WSAError={wsaerr}")
         if rc != 0:
             t0 = time.time()
             ok = False
@@ -155,6 +158,9 @@ class Client:
             err = struct.unpack("<i", eb.raw[:4])[0]
             if err:
                 ws2.closesocket(s)
+                if err == 10048:
+                    raise OSError("connect 失败, SO_ERROR=10048（耳机正被另一个程序占用："
+                                  "可能是本机另一个实例，或手机上的 Sound Connect）")
                 raise OSError(f"connect 失败, SO_ERROR={err}")
         blk = ctypes.c_ulong(0)
         ws2.ioctlsocket(s, 0x8004667E, ctypes.byref(blk))
@@ -269,7 +275,7 @@ def connect_v2(mac, channel=9, tries=5):
 
 
 def main():
-    mac = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("SONY_MAC", "")
+    mac = sys.argv[1] if len(sys.argv) > 1 else "88:C9:E8:91:BE:6B"
     c = Client(mac)
     try:
         plan = [

@@ -406,6 +406,31 @@ def make_icon(size=None):
     return hicon
 
 
+# --- battery badge: pre-rendered .ico files (PIL, at packaging time) ------
+WS_EX_TOOLWINDOW = 0x00000080
+
+_BADGE_FILES = {0: "app-icon-green.ico", 1: "app-icon-amber.ico",
+                2: "app-icon-red.ico"}
+
+
+def make_badged_icon(stage, size=None):
+    """App icon with a battery dot, pre-rendered as a plain .ico file.
+
+    stage: 0 green (>20 %), 1 amber (10-19 %), 2 red (<10 %); None = plain.
+    Loading a file sidesteps every alpha/mask pitfall of drawing an icon at
+    runtime - the dot is baked in by PIL when the assets are generated.
+    """
+    name = _BADGE_FILES.get(stage)
+    if not name:
+        return None
+    path = asset_path(name)
+    if not os.path.isfile(path):
+        return None
+    if size is None:
+        size = _GetSystemMetrics(SM_CXSMICON) or 16
+    return _LoadImage(None, path, IMAGE_ICON, size, size, LR_LOADFROMFILE)
+
+
 # ---------------------------------------------------------------------------
 # Tray
 # ---------------------------------------------------------------------------
@@ -591,6 +616,32 @@ class Tray:
             n.uFlags, n.szTip = NIF_TIP, text[:127]
             _NotifyIcon(NIM_MODIFY, ctypes.byref(n))
 
+    def set_battery(self, level):
+        """Overlay a battery dot on the tray icon.
+
+        stage: 0 green (>20 %), 1 amber (10-19 %), 2 red (<10 %); None hides
+        the dot. The icon is only rebuilt when the stage actually changes.
+        """
+        stage = None if level is None else \
+            (0 if level > 20 else 1 if level >= 10 else 2)
+        if stage == getattr(self, "_battery_stage", object()):
+            return
+        self._battery_stage = stage
+        try:
+            hicon = make_badged_icon(stage)
+        except Exception:
+            return
+        if not hicon:
+            return
+        if self.nid is not None:
+            n = self.nid
+            n.uFlags = NIF_ICON
+            n.hIcon = hicon
+            _NotifyIcon(NIM_MODIFY, ctypes.byref(n))
+        if getattr(self, "hicon", None):
+            _DestroyIcon(self.hicon)
+        self.hicon = hicon
+
     def balloon(self, title, text):
         if self.nid is None:                  # called before run(): defer it
             self._pending_balloon = (title, text)
@@ -635,7 +686,10 @@ class Tray:
                         cmd = self._popup()
                         if cmd:
                             self._dispatch(cmd)
-                    elif ev == WM_LBUTTONDBLCLK:
+                    elif ev in (WM_LBUTTONUP, WM_LBUTTONDBLCLK):
+                        # Single click already opens the panel (the Windows
+                        # convention); the double-click branch only keeps
+                        # older muscle memory working.
                         self.cb.get("on_open", lambda: None)()
                     return 0
                 if msg == _taskbar_msg:            # Explorer restarted
@@ -672,7 +726,10 @@ class Tray:
         if not _RegisterClass(ctypes.byref(cls)) and ctypes.get_last_error() != 1410:
             raise OSError("RegisterClassExW failed: %d" % ctypes.get_last_error())
 
-        self.hwnd = _CreateWindow(0, "SonyHeadphonesTrayWnd", "SonyHeadphonesTray",
+        # WS_EX_TOOLWINDOW keeps the hidden message window out of the taskbar
+        # and out of Alt-Tab: the app lives in the tray only.
+        self.hwnd = _CreateWindow(WS_EX_TOOLWINDOW, "SonyHeadphonesTrayWnd",
+                                  "SonyHeadphonesTray",
                                   0, 0, 0, 0, 0, None, None, hinst, None)
         if not self.hwnd:
             raise OSError("CreateWindowExW failed: %d" % ctypes.get_last_error())

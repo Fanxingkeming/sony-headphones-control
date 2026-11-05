@@ -55,16 +55,20 @@ else:
     DATA_DIR = HERE
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
+# Keep in sync with appmain.VERSION - the panel reads it from /api/context
+# for the About card and the update check.
+VERSION = "1.3.1"
+
 DEVICES = {
     "xm4": {
         "id": "xm4", "name": "WH-1000XM4", "short": "XM4", "protocol": "v1",
-        "mac": "", "uuid": UUID_V1,
+        "mac": "88:C9:E8:91:BE:6B", "uuid": UUID_V1,
         "caps": ["anc", "level", "focus", "wind", "eq", "eqbands", "dsee", "quality",
                  "voice_write", "stc", "apo_full", "pause", "multipoint", "touch"],
     },
     "ls900n": {
         "id": "ls900n", "name": "LinkBuds S (WF-LS900N)", "short": "LS900N", "protocol": "v2",
-        "mac": "", "uuid": UUID_V2,
+        "mac": "AC:80:0A:BF:C3:C7", "uuid": UUID_V2,
         "caps": ["anc", "level", "focus", "eq", "eqbands", "dsee", "quality", "voice",
                  "stc", "stc_ext", "apo_two", "keys", "multipoint_ro", "battery_detail"],
     },
@@ -355,6 +359,10 @@ def do_connect(dev, quick=False):
             except Exception:
                 pass
     if c is None:
+        if "10048" in str(last):
+            raise OSError(
+                "%s：%s — 关掉占用它的程序（本机的另一个实例，或手机上的 Sound Connect）后重试。"
+                % (dev["name"], last))
         raise OSError(
             "%s：%s。确认耳机已开机、已从充电盒取出，且手机上的 Sound Connect 已完全退出。"
             % (dev["name"], last))
@@ -703,6 +711,7 @@ def current_context(demo=False, want=None, force=False, quiet=False):
     key = probe_device(prefer=want if force else None, force=force, quiet=quiet)
     return {"ok": True, "device": public_device(key), "status": CURRENT["status"],
             "alternatives": CURRENT["alternatives"], "probe": CURRENT["probe"],
+            "version": VERSION,
             "color": CURRENT.get("color") or CACHED_COLOR.get(key),
             "online": [DEVICES[k]["short"] for k in CURRENT["online"]]}
 
@@ -1146,11 +1155,12 @@ def apply_action(key, c, action, value):
 
 STATIC = {"": "index.html", "/": "index.html", "/index.html": "index.html",
           "/style.css": "style.css", "/app.js": "app.js",
+          "/manifest.json": "manifest.json", "/sw.js": "sw.js",
           "/favicon.ico": "assets/app-icon.ico"}
 MIME = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
         ".js": "application/javascript; charset=utf-8",
         ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp",
-        ".ico": "image/x-icon"}
+        ".ico": "image/x-icon", ".json": "application/manifest+json"}
 # Product artwork is added per colourway (xm4_b, xm4_s, ls900n_cream, ...), so a
 # hand-maintained whitelist would need editing for every new render. Accept any
 # plain image file name that actually sits in app/assets: the name is validated
@@ -1366,6 +1376,7 @@ class Handler(BaseHTTPRequestHandler):
             SESSION.dispose()
             self._json({"ok": True})
             return
+
 
         if p == "/api/switch":
             result = switch_device(demo=bool(body.get("demo")))

@@ -6,7 +6,8 @@ HERE = os.path.abspath(globals().get("SPECPATH", os.getcwd()))
 TOOLS = os.path.normpath(os.path.join(HERE, "..", "tools"))
 
 # Static assets are read from sys._MEIPASS by server.py at runtime.
-DATAS = [(os.path.join(HERE, f), ".") for f in ("index.html", "style.css", "app.js")]
+DATAS = [(os.path.join(HERE, f), ".") for f in
+         ("index.html", "style.css", "app.js", "manifest.json", "sw.js")]
 ASSETS_DIR = os.path.join(HERE, "assets")
 
 # SHC_CLEAN=1 produces the redistributable package. It leaves out the official
