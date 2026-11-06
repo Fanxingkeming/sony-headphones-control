@@ -15,7 +15,7 @@ import time
 import server as srv
 import tray
 
-VERSION = "1.3.1"
+VERSION = "1.3.2"
 PREFS_NAME = "prefs.json"
 PORT_NAME = "port.json"
 
@@ -278,7 +278,11 @@ class App:
                 tray.open_panel(self.url())
             return 0
 
+        preferred = self.port
         self.server, self.port = srv.start_server(self.port)
+        if self.port != preferred:
+            log("preferred port %d busy or OS-reserved, fell back to %d"
+                % (preferred, self.port))
         try:
             with open(self.port_path, "w", encoding="utf-8") as f:
                 json.dump({"port": self.port}, f)
@@ -298,7 +302,12 @@ class App:
             "get_state": self.state,
         })
         self._sync_tip()
-        self.tray.balloon("Sony 耳机控制面板", "已启动，双击图标打开面板；右键显示菜单")
+        balloon = "已启动，双击图标打开面板；右键显示菜单"
+        if self.port != preferred:
+            balloon += ("\n端口 %d 被占用或被 Windows 保留，已自动改用 %d；"
+                        "托盘「打开面板」始终指向当前端口"
+                        % (preferred, self.port))
+        self.tray.balloon("Sony 耳机控制面板", balloon)
         threading.Thread(target=self._battery_watch, name="battery-watch",
                          daemon=True).start()
         if not self.minimized:

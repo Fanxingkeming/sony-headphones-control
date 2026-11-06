@@ -19,6 +19,9 @@ packages.
 Quick start: `python app/server.py` → <http://127.0.0.1:8765>; the tray app is
 `python app/appmain.py`; `python app/build.py` produces `SonyHeadphonesControl.exe`.
 The self-test is offline and runs with `python app/selftest.py` (also on CI).
+If 8765 is busy, or Windows has reserved it for Hyper-V/WSL, the app
+scans for the next free port and records the real one in `port.json`;
+the tray always opens the current port.
 
 Everything below is in Chinese. Backend messages (connect errors, action results) are
 Chinese-only; the interface chrome is translated.
@@ -68,7 +71,7 @@ Chinese-only; the interface chrome is translated.
 
 ## 下载
 
-当前版本 **v1.3.1**，见 [Releases](https://github.com/Fanxingkeming/sony-headphones-control/releases)。
+当前版本 **v1.3.2**，见 [Releases](https://github.com/Fanxingkeming/sony-headphones-control/releases)。
 
 - `SonyHeadphonesControl.exe` — 单文件、约 3.3 MiB、免安装、无第三方运行时依赖
 - 发布的 exe **不包含 Sony 的产品渲染图与 Sound Connect 应用图标**（版权原因，见
@@ -95,6 +98,9 @@ python app/server.py --port 8765 --open   # 只跑 Web 面板
 ```
 
 浏览器打开 `http://127.0.0.1:8765/`。托盘右键可以打开面板、切换耳机、设置自启。
+默认端口 8765 被占用或被 Windows 保留（Hyper-V/WSL 的 `excludedportrange`）时，
+会自动顺延到第一个可用端口；实际端口写入 `%LOCALAPPDATA%\SonyHeadphonesControl\port.json`，
+托盘提示与「打开面板」始终指向当前端口。
 
 ### 构建单文件 exe
 

@@ -57,7 +57,7 @@ CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
 # Keep in sync with appmain.VERSION - the panel reads it from /api/context
 # for the About card and the update check.
-VERSION = "1.3.1"
+VERSION = "1.3.2"
 
 DEVICES = {
     "xm4": {
@@ -1436,14 +1436,30 @@ class LocalHTTPServer(ThreadingHTTPServer):
         self.server_name, self.server_port = host, port
 
 
-def create_server(port=8765, tries=12):
-    """Bind 127.0.0.1 on the first free port. Returns (server, port)."""
+PORT_TRIES = 256
+
+
+def create_server(port=8765, tries=PORT_TRIES):
+    """Bind 127.0.0.1 on the first free port. Returns (server, port).
+
+    Windows hands whole blocks of ports to Hyper-V/WSL (see
+    ``netsh interface ipv4 show excludedportrange protocol=tcp``). Binding
+    inside such a block fails with WSAEACCES (errno 13), not WSAEADDRINUSE,
+    so the entire old 12-port window 8765-8776 can disappear after a reboot.
+    Scan a wider window first (a stable port keeps bookmarks and installed
+    PWAs working), then let the OS pick a free ephemeral port as a last
+    resort - the OS never hands out one of its own reserved ports.
+    """
     for p in range(port, port + tries):
         try:
             return LocalHTTPServer(("127.0.0.1", p), Handler), p
         except OSError:
             continue
-    return None, None
+    try:
+        s = LocalHTTPServer(("127.0.0.1", 0), Handler)
+        return s, s.server_address[1]
+    except OSError:
+        return None, None
 
 
 def warmup():
@@ -1458,11 +1474,12 @@ def warmup():
     threading.Thread(target=run, name="mdr-warmup", daemon=True).start()
 
 
-def start_server(port=8765, tries=12):
+def start_server(port=8765, tries=PORT_TRIES):
     """Start the HTTP server on a daemon thread (used by the tray entry point)."""
     srv, bound = create_server(port, tries)
     if srv is None:
-        raise OSError("无法绑定端口（%d-%d 都被占用）" % (port, port + tries - 1))
+        raise OSError("无法绑定本地端口（%d 起 %d 个端口均被占用或被 Windows 保留）"
+                      % (port, tries))
     srv.daemon_threads = True
     t = threading.Thread(target=srv.serve_forever,
                          kwargs={"poll_interval": 0.2}, name="mdr-http", daemon=True)
@@ -1490,9 +1507,11 @@ def main():
             port = int(sys.argv[sys.argv.index("--port") + 1])
         except (ValueError, IndexError):
             pass
+    requested = port
     srv, port = create_server(port)
     if srv is None:
-        print("无法绑定端口（%d-%d 都被占用）" % (port, port + 11))
+        print("无法绑定本地端口（%d 起 %d 个端口均被占用或被 Windows 保留）"
+              % (requested, PORT_TRIES))
         return
     srv.daemon_threads = True
     warmup()

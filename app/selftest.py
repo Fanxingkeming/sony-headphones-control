@@ -455,12 +455,32 @@ def main():
         ("panel offers the device picker", _picker_wired()),
         ("ldac probe answers read-only", _ldac_probe_shape()),
         ("sound card carries the ldac row", _ldac_row_wired()),
+        # Windows can reserve the whole 8765-8776 block for Hyper-V/WSL.
+        ("OS-reserved port range falls back to a free port", _port_fallback()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)
     passed = sum(1 for _, ok in checks if ok)
     print("\n%d/%d passed" % (passed, len(checks)))
     return 0 if passed == len(checks) else 1
+
+
+def _port_fallback():
+    """A busy or OS-reserved preferred port still yields a usable server."""
+    import socket
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server = None
+    try:
+        probe.bind(("127.0.0.1", 0))
+        busy = probe.getsockname()[1]
+        server, bound = srv.create_server(busy, tries=1)
+        return bool(server) and bool(bound) and bound != busy
+    except OSError:
+        return False
+    finally:
+        if server is not None:
+            server.server_close()
+        probe.close()
 
 
 if __name__ == "__main__":
