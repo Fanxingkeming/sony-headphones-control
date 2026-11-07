@@ -183,8 +183,14 @@ html:not([data-theme="dark"]) .ico-sun{display:none}
 .row.eqrow{gap:10px}
 
 /* ---------- overview ---------- */
-.ov-body{display:grid;grid-template-columns:118px 1fr 140px;gap:12px}
-.battery-block{border-right:1px solid var(--outline-variant);padding-right:16px}
+.ov-body{display:grid;grid-template-columns:118px minmax(0,1fr) 158px;gap:12px;align-items:start}
+/* Left = battery, middle = headline fields, right = detail + product shot.
+   Explicit placement matters: a full-width <details> used to push the photo
+   onto a new row, leaving the entire right column empty. */
+.battery-block{grid-column:1;grid-row:1;border-right:1px solid var(--outline-variant);padding-right:16px}
+.ov-body>#ov-kv{grid-column:2;grid-row:1}
+.ov-side{grid-column:3;grid-row:1;display:flex;flex-direction:column;gap:8px;min-width:0;align-self:stretch}
+.ov-side .dev-photo-wrap{margin-top:auto}
 .battery-num{font-size:38px;font-weight:550;line-height:1;letter-spacing:-1.5px;font-variant-numeric:tabular-nums}
 .battery-num small{font-size:16px;font-weight:450;color:var(--on-srf-variant);margin-left:2px;letter-spacing:0}
 .battery-label{font-size:11.5px;color:var(--on-srf-variant);margin:4px 0 6px}
@@ -402,7 +408,72 @@ input[type=range]{accent-color:var(--primary);width:100%;cursor:pointer;height:2
   .topright{width:100%;justify-content:space-between;margin-left:0}
   .grid{flex-direction:column;padding:10px 14px 0}
   .banner{margin:10px 16px 0}
-  .ov-body{grid-template-columns:110px 1fr}
-  .dev-photo-wrap{grid-column:1/-1;min-height:100px}
+  .ov-body{grid-template-columns:110px minmax(0,1fr) 190px}
   .dev-photo{height:120px}
+}
+
+/* ---------- review pass: guidance, help, disclosure, a11y ---------------- */
+#card-scene{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 19h14M6.5 15.5l9-9M14 4l1.5 2.5L18 8l-2.5 1.5L14 12l-1.5-2.5L10 8l2.5-1.5z'/%3E%3Cpath d='M19 13l.7 1.3L21 15l-1.3.7L19 17l-.7-1.3L17 15l1.3-.7z'/%3E%3C/svg%3E")}
+.notice{
+  margin:10px 16px 0;padding:10px 14px;border-radius:14px;font-size:12.5px;line-height:1.6;
+  background:var(--primary-container);color:var(--on-primary-container);
+  border:1px solid var(--outline-variant);max-width:1400px;
+}
+.notice-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.notice-head b{font-weight:650}
+.notice .btn{color:inherit;border-color:transparent}
+.notice .btn:hover{background:rgba(127,127,127,.14)}
+.steps{margin:6px 0 0;padding-left:20px}
+.steps li{margin:1px 0}
+/* Inline "?" term help. The label stays inline so the button sits next to it,
+   while the hint below keeps its own line. */
+.row.split>div:first-child .lbl{display:inline-block;vertical-align:middle}
+.help{
+  display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;
+  width:16px;height:16px;margin-left:5px;padding:0;border-radius:50%;
+  border:1px solid var(--outline);background:transparent;color:var(--on-srf-variant);
+  font-size:10px;font-weight:700;line-height:1;cursor:pointer;
+}
+.help:hover{background:var(--state);color:var(--primary);border-color:var(--primary)}
+/* Fold protocol/debug fields and the raw frame log out of the first screen. */
+.kvmore{margin-top:0}
+/* The right column is narrow: stack label above value instead of two columns. */
+.ov-side .kv{grid-template-columns:minmax(0,1fr);gap:1px 0}
+.ov-side .kv dd{margin-bottom:4px}
+.kvmore summary,.logmore summary{
+  cursor:pointer;font-size:11.5px;color:var(--on-srf-variant);padding:3px 0;
+  list-style-position:inside;
+}
+.kvmore summary:hover,.logmore summary:hover{color:var(--primary)}
+.kvmore .kv{margin-top:6px}
+.logmore .logbox{margin-top:8px}
+.scene-actions{flex-wrap:wrap;gap:8px}
+.segmented{flex-wrap:wrap}
+.chips .eqchip.scenechip{border-style:dashed}
+/* Keyboard focus must be visible everywhere (switches hide their real input). */
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.switch input:focus-visible + span{outline:2px solid var(--primary);outline-offset:3px}
+.switch input:disabled + span{opacity:.5;cursor:not-allowed}
+.eqchip:disabled,.segmented button:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:640px){
+  .topbar{gap:8px;padding:8px 10px}
+  .brand-sub{display:none}
+  .brand-logo{width:60px}
+  .topright{gap:6px;flex-wrap:wrap}
+  .topright .btn{padding:5px 9px;font-size:11.5px}
+  .grid{padding:10px 10px 0;gap:10px}
+  .card{padding:10px 12px 12px}
+  .ov-body{grid-template-columns:1fr}
+  .battery-block,.ov-body>#ov-kv,.ov-side{grid-column:1;grid-row:auto}
+  .battery-block{border-right:0;border-bottom:1px solid var(--outline-variant);padding:0 0 8px}
+  .ov-side{margin-top:2px}
+  .ov-side .dev-photo-wrap{margin-top:0;min-height:96px}
+  .bt-row{flex-wrap:wrap}
+  .bt-row select{flex:1 1 140px;width:auto}
+  .eqactions{flex-wrap:wrap}
+  .eqchip{padding:5px 11px;font-size:12px}
+  .eqbands{gap:2px;padding:0}
+  .vslider{width:26px}
+  .notice,.banner{margin:8px 10px 0}
+  .foot{font-size:10.5px}
 }

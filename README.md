@@ -16,7 +16,11 @@ packages.
 - English / Chinese UI (follows the system language; force with `?lang=en`), light and
   dark theme, single-file exe around 3.3 MiB.
 
-Quick start: `python app/server.py` → <http://127.0.0.1:8765>; the tray app is
+Quick start (3 steps): connect the headset in Windows Bluetooth, quit Sound Connect
+on the phone completely, then double-click `SonyHeadphonesControl.exe` and open the
+panel from the tray. It lives at <http://127.0.0.1:8765>.
+
+From source: `python app/server.py` → <http://127.0.0.1:8765>; the tray app is
 `python app/appmain.py`; `python app/build.py` produces `SonyHeadphonesControl.exe`.
 The self-test is offline and runs with `python app/selftest.py` (also on CI).
 If 8765 is busy, or Windows has reserved it for Hyper-V/WSL, the app
@@ -31,17 +35,26 @@ Chinese-only; the interface chrome is translated.
 在 Windows 上通过逆向得到的 **Sony MDR / Tandem 协议**，本地控制索尼耳机的单文件小工具。
 纯 Python 标准库实现（运行时不依赖任何第三方包），带系统托盘和本地 Web 控制面板。
 
-> ## ⚠️ 只支持两款机型
->
-> | 机型 | 协议 | 状态 |
-> |---|---|---|
-> | **WH-1000XM4** | MDR v1 | 完整实测 |
-> | **LinkBuds S (WF-LS900N)** | MDR v2 | 完整实测 |
->
-> 其他型号（WH-1000XM3 / XM5、WF-1000XM5、WF-C500、ULT WEAR 等）**没有做任何适配**。
-> 它们可能用不同的协议族、不同的命令字节和不同的握手顺序，本项目不保证能用，也不会为它们做兼容。
->
-> 本项目为非官方项目，与 Sony 没有任何关联。
+## 30 秒上手
+
+| 步骤 | 做什么 |
+|---|---|
+| 1 | 在 Windows「蓝牙和其他设备」里让耳机处于**已连接** |
+| 2 | **完全退出手机上的 Sound Connect**（一副耳机同时只接受一个 tandem 客户端） |
+| 3 | 双击 `SonyHeadphonesControl.exe` → 托盘右键「打开面板」，或浏览器打开 `http://127.0.0.1:8765/` |
+
+耳机没连上时，面板会显示这三步并**锁定所有写入控件**。默认端口被占用或被 Windows
+保留时会自动顺延，实际端口写在托盘提示与 `port.json` 里。
+
+**支持机型**
+
+| 机型 | 协议 | 状态 |
+|---|---|---|
+| **WH-1000XM4** | MDR v1 | 完整实测 |
+| **LinkBuds S (WF-LS900N)** | MDR v2 | 完整实测 |
+
+其他型号（WH-1000XM3 / XM5、WF-1000XM5、WF-C500、ULT WEAR 等）**没有做任何适配**，
+也不会为它们做兼容。本项目为非官方项目，与 Sony 没有任何关联。
 
 ## 它做什么
 
@@ -52,7 +65,14 @@ Chinese-only; the interface chrome is translated.
 - **音质**：EQ 预设与 6 段自定义、DSEE Extreme、连接质量（音质优先 / 稳定优先）
 - **系统**：智能免摘（Speak-to-Chat）、取下暂停、触摸面板、自动断电、多点连接（读写）、左右耳按键分配
 - **颜色识别**：`04 03` 读取系列与机身颜色（如白色 `0x02`），据此选择对应的产品图
-- **其他**：明暗主题、原始帧日志、托盘菜单、单实例、开机自启
+- **一键场景**：通勤 / 办公室 / 飞机 / 居家，一次在一条链路上写完降噪、环境声、EQ、DSEE；
+  还能把当前设置存成自己的场景、**撤销上一次写入**、导出/导入 JSON 配置备份
+- **风噪降低**是降噪模式的一档（点其它模式即退出），不再是开了关不掉的按钮
+- **离线锁定与引导**：没连上耳机时所有写入控件禁用，并给出三步排查；协议调试字段和
+  原始帧日志收进折叠区，术语旁有 `?` 解释，顶栏 `?` 列出快捷键
+- **隐私**：默认不联网，只有手动点「检查更新」才访问 GitHub
+- **无障碍**：焦点可见、开关/滑块有朗读标签、`aria-live` 提示、语言切换同步更新 `html lang`
+- **其他**：明暗主题、托盘菜单、单实例、开机自启
 
 ## 界面
 
@@ -71,7 +91,7 @@ Chinese-only; the interface chrome is translated.
 
 ## 下载
 
-当前版本 **v1.3.2**，见 [Releases](https://github.com/Fanxingkeming/sony-headphones-control/releases)。
+当前版本 **v1.4.0**，见 [Releases](https://github.com/Fanxingkeming/sony-headphones-control/releases)。
 
 - `SonyHeadphonesControl.exe` — 单文件、约 3.3 MiB、免安装、无第三方运行时依赖
 - 发布的 exe **不包含 Sony 的产品渲染图与 Sound Connect 应用图标**（版权原因，见
@@ -249,6 +269,7 @@ app/assets/ls900n_cream.webp # 米色     (ModelColor.CREAM)
 ## 已知限制
 
 - **只支持 WH-1000XM4 与 LinkBuds S**，其他机型不做适配
+- 端口因系统保留段而漂移时，已安装的 PWA 快捷方式仍指向旧端口，需要重新安装
 - 一副耳机同时只接受一个 tandem 客户端；手机 App 连着时会 `SO_ERROR=10060`
 - Windows only（`AF_BTH` / RFCOMM）
 - LinkBuds S 的 v2 握手比 v1 多一步 `06 00`，缺了后面所有命令都不响应

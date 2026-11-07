@@ -457,6 +457,14 @@ def main():
         ("sound card carries the ldac row", _ldac_row_wired()),
         # Windows can reserve the whole 8765-8776 block for Hyper-V/WSL.
         ("OS-reserved port range falls back to a free port", _port_fallback()),
+        # Review pass: structure, honesty and the scene/undo feature.
+        ("every HTML element closes on the right nesting level", _html_wellformed()),
+        ("scene card is present exactly once", _scene_wired()),
+        ("demo scene replays every step", _demo_scene_roundtrip()),
+        ("wind is an ANC mode, not a one-way enable button", _wind_is_mode()),
+        ("privacy copy matches the manual-only update check", _privacy_honest()),
+        ("offline state disables writes and explains the first run", _offline_gate()),
+        ("live regions and focus styles are present", _a11y_wired()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)
@@ -481,6 +489,102 @@ def _port_fallback():
         if server is not None:
             server.server_close()
         probe.close()
+
+
+def _read(name):
+    with open(os.path.join(srv.ROOT, name), encoding="utf-8") as f:
+        return f.read()
+
+
+def _html_wellformed():
+    """Every non-void element must close at the same nesting level.
+
+    A missing </div> in the About card once trapped the whole body inside the
+    flex header; a plain grep cannot catch that, but a tag stack can.
+    """
+    from html.parser import HTMLParser
+    void = {"area", "base", "br", "col", "embed", "hr", "img", "input",
+            "link", "meta", "param", "source", "track", "wbr"}
+
+    class Check(HTMLParser):
+        def __init__(self):
+            HTMLParser.__init__(self, convert_charrefs=True)
+            self.stack, self.bad = [], []
+
+        def handle_startendtag(self, tag, attrs):
+            pass                      # <path/>, <circle/> ... in inline SVGs
+
+        def handle_starttag(self, tag, attrs):
+            if tag not in void:
+                self.stack.append(tag)
+
+        def handle_endtag(self, tag):
+            if tag in void:
+                return
+            if not self.stack or self.stack[-1] != tag:
+                self.bad.append((tag, self.stack[-3:]))
+            else:
+                self.stack.pop()
+
+    c = Check()
+    c.feed(_read("index.html"))
+    return not c.bad and not c.stack
+
+
+def _scene_wired():
+    html, js, py = _read("index.html"), _read("app.js"), _read("server.py")
+    return (html.count('id="card-scene"') == 1
+            and html.count('id="sceneChips"') == 1
+            and "BUILTIN_SCENES" in js and "stepsFromState" in js
+            and "btnCfgExport" in js and "btnCfgImport" in js
+            and 'elif action == "scene":' in py
+            and "allowed = {" in py)
+
+
+def _demo_scene_roundtrip():
+    import copy
+    before = copy.deepcopy(srv.DEMO["xm4"])
+    try:
+        srv.demo_action("xm4", "scene", {"steps": [
+            {"action": "anc_mode", "value": "nc"},
+            {"action": "dsee", "value": True},
+            {"action": "eq_bands", "value": [0, 2, 1, 0, -1, 0]}]})
+        st = srv.demo_state("xm4")
+        return (st["anc"]["mode"] == "nc" and st["sound"]["dsee"] is True
+                and st["eq"]["bands"] == [0, 2, 1, 0, -1, 0])
+    finally:
+        srv.DEMO["xm4"] = before
+
+
+def _wind_is_mode():
+    html, py = _read("index.html"), _read("server.py")
+    return (html.count('data-action="anc_mode" data-value="wind"') == 1
+            and 'data-action="wind"' not in html
+            and 'elif value == "wind":' in py
+            and "已切换到风噪降低" in py)
+
+
+def _privacy_honest():
+    html, js = _read("index.html"), _read("app.js")
+    return ("不上传任何数据" not in html
+            and "默认不联网" in html
+            and "start-up makes no external request" in js
+            and js.count("  checkUpdate();") == 0)
+
+
+def _offline_gate():
+    html, js = _read("index.html"), _read("app.js")
+    return ('id="offlineTip"' in html and "applyOfflineState" in js
+            and "el.disabled = !connected" in js
+            and "btnGuideClose" in js and "不再提示" in html)
+
+
+def _a11y_wired():
+    html, js, css = _read("index.html"), _read("app.js"), _read("style.css")
+    return ('aria-live="polite"' in html and 'role="status"' in html
+            and "document.documentElement.lang" in js
+            and 'setAttribute(\'aria-label\', lbl.textContent.trim())' in js
+            and ":focus-visible" in css)
 
 
 if __name__ == "__main__":

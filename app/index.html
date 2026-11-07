@@ -30,17 +30,26 @@
     </div>
     <button class="btn ghost" id="btnRefresh" title="重新读取所有状态">↻ 刷新</button>
     <button class="btn ghost lang-btn" id="btnLang" data-raw="1" title="切换语言 / switch language" aria-label="切换语言">EN</button>
-    <button class="btn ghost theme-btn" id="btnAccent" data-raw="1" title="强调色模式（跟随耳机 / Sony 签名金）" aria-label="切换强调色模式">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c-4.4 1.9-7 5.1-7 8.9C5 15.7 7.9 19 12 19s7-3.3 7-7.1c0-3.8-2.6-7-7-8.9z"/><circle cx="9.5" cy="13.5" r="1.3"/><circle cx="14.5" cy="13.5" r="1.3"/><circle cx="12" cy="9.5" r="1.3"/></svg>
-    </button>
+    <button class="btn ghost" id="btnAccent" data-raw="1" title="强调色模式（跟随耳机 / Sony 签名金）" aria-label="切换强调色模式">强调色：跟随</button>
     <button class="btn ghost theme-btn" id="btnTheme" title="切换明暗主题" aria-label="切换明暗主题">
       <svg class="ico-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
       <svg class="ico-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
     </button>
+    <button class="btn ghost" id="btnHelp" title="快捷键与帮助" aria-label="快捷键与帮助">?</button>
   </div>
 </header>
 
-<div class="banner hidden" id="banner"></div>
+<div class="banner hidden" id="banner" role="status" aria-live="polite"></div>
+
+<div class="notice hidden" id="offlineTip" role="status">
+  <div class="notice-head"><b>耳机未连接 · 设置已锁定</b>
+    <button class="btn ghost small" id="btnGuideClose">不再提示</button></div>
+  <ol class="steps">
+    <li>在 Windows 蓝牙设置里让耳机处于「已连接」</li>
+    <li>完全退出手机上的 Sound Connect（同一时刻只允许一个客户端）</li>
+    <li>点右上角「↻ 刷新」重新读取状态</li>
+  </ol>
+</div>
 
 <main class="grid" id="grid">
 
@@ -58,8 +67,14 @@
         <div class="battery-detail" id="bat-detail"></div>
       </div>
       <dl class="kv" id="ov-kv"></dl>
-      <div class="dev-photo-wrap">
-        <img class="dev-photo hidden" id="devPhoto" alt="当前耳机">
+      <div class="ov-side">
+        <details class="kvmore" id="ovMore">
+          <summary>设备详情（协议信息）</summary>
+          <dl class="kv" id="ov-kv-more"></dl>
+        </details>
+        <div class="dev-photo-wrap">
+          <img class="dev-photo hidden" id="devPhoto" alt="当前耳机">
+        </div>
       </div>
       <div class="bt-row">
         <label for="btPick">蓝牙设备</label>
@@ -78,11 +93,11 @@
 
   <section class="card" id="card-system">
     <div class="card-head">
-      <div><h2>系统设置</h2><p>System · General</p></div>
+      <div><h2>系统设置</h2><p>System · General · 改动即时写入耳机</p></div>
     </div>
 
     <div class="row split">
-      <div><label class="lbl" id="stcLabel">智能免摘 / 智能对话</label><span class="hint">Speak-to-Chat</span></div>
+      <div><label class="lbl" id="stcLabel">智能免摘 / 智能对话</label><button class="help" data-help="Speak-to-Chat｜检测到你说话时自动暂停播放并放大环境声，说完恢复。" aria-label="智能免摘说明">?</button><span class="hint">Speak-to-Chat</span></div>
       <label class="switch"><input type="checkbox" data-action="stc" id="stcSw"><span></span></label>
     </div>
 
@@ -113,7 +128,7 @@
       <label class="switch"><input type="checkbox" data-action="touch" id="touchSw"><span></span></label>
     </div>
     <div class="row split cap-multi" id="multiRow">
-      <div><label class="lbl">多点连接</label><span class="hint" id="multiHint">同时连接两台设备</span></div>
+      <div><label class="lbl">多点连接</label><button class="help" data-help="多点连接｜耳机同时保持两台设备的连接。XM4 写入后链路会断开重连，LinkBuds S 为只读。" aria-label="多点连接说明">?</button><span class="hint" id="multiHint">同时连接两台设备</span></div>
       <label class="switch"><input type="checkbox" data-action="multipoint" id="multiSw"><span></span></label>
     </div>
 
@@ -129,10 +144,10 @@
 
   <section class="card" id="card-sound">
     <div class="card-head">
-      <div><h2>声音</h2><p>Audio · Connection</p></div>
+      <div><h2>声音</h2><p>Audio · Connection · 改动即时写入耳机</p></div>
     </div>
     <div class="row split">
-      <div><label class="lbl">DSEE Extreme</label><span class="hint">压缩音源升频</span></div>
+      <div><label class="lbl">DSEE Extreme</label><button class="help" data-help="DSEE Extreme｜把压缩音源实时升频，接近无损听感；对本地无损文件没有作用。" aria-label="DSEE Extreme 说明">?</button><span class="hint">压缩音源升频</span></div>
       <label class="switch"><input type="checkbox" data-action="dsee" id="dseeSw"><span></span></label>
     </div>
     <div class="row">
@@ -143,17 +158,19 @@
       </select>
     </div>
     <div class="row split" id="ldacRow">
-      <div><label class="lbl">LDAC 输出</label><span class="hint" id="ldacState">检测中…</span></div>
+      <div><label class="lbl">LDAC 输出</label><button class="help" data-help="LDAC｜索尼的高码率蓝牙编码。Windows 只自带 SBC/AAC，需要额外发射端才可能输出 LDAC；这里显示的只是耳机侧偏好与实际协商结果。" aria-label="LDAC 说明">?</button><span class="hint" id="ldacState">检测中…</span></div>
       <button class="btn ghost small" id="btnLdacInfo" aria-expanded="false">说明</button>
     </div>
     <div class="ldac-note hidden" id="ldacNote">
       <p class="ldac-bridge" id="ldacBridge">未检测到 A2DP Windows Bridge</p>
       <p>Windows 只带 SBC 和 AAC，没有 LDAC 编码器，也不开放第三方编码器接口。</p>
-      <p>改注册表或装普通驱动都不会让系统输出 LDAC。</p>
       <p>「音质优先（LDAC）」只影响耳机侧偏好；源端不给 LDAC 时仍协商为 AAC。</p>
-      <p>开源方案 A2DP Windows Bridge 需要一支专用 USB 蓝牙适配器，内置蓝牙不能这样接管。</p>
-      <p>商业方案 Alternative A2DP Driver 可替换 A2DP 驱动，支持内置蓝牙。</p>
-      <p>本应用不下载驱动，也不修改系统蓝牙栈。</p>
+      <details class="ldac-more"><summary>了解更多</summary>
+        <p>改注册表或装普通驱动都不会让系统输出 LDAC。</p>
+        <p>开源方案 A2DP Windows Bridge 需要一支专用 USB 蓝牙适配器，内置蓝牙不能这样接管。</p>
+        <p>商业方案 Alternative A2DP Driver 可替换 A2DP 驱动，支持内置蓝牙。</p>
+        <p>本应用不下载驱动，也不修改系统蓝牙栈。</p>
+      </details>
     </div>
     <div class="row split" id="voiceRow">
       <div><label class="lbl">通知和语音向导</label><span class="hint" id="voiceHint">Table#2</span></div>
@@ -163,32 +180,47 @@
   </div>
 
   <div class="col">
+  <section class="card" id="card-scene">
+    <div class="card-head">
+      <div><h2>一键场景</h2><p>一次切换降噪、环境声与音质</p></div>
+      <span class="chip subtle">可撤销</span>
+    </div>
+    <div class="chips" id="sceneChips"></div>
+    <div class="row end scene-actions">
+      <button class="btn small" id="btnSceneSave">保存当前为场景</button>
+      <button class="btn small" id="btnUndo" disabled>撤销上一次</button>
+      <button class="btn ghost small" id="btnCfgExport">导出配置</button>
+      <button class="btn ghost small" id="btnCfgImport">导入配置</button>
+      <input type="file" id="cfgFile" accept="application/json,.json" class="hidden">
+    </div>
+    <p class="hint">场景会连续写入多项设置，约 2–4 秒，期间请勿操作耳机。当前设置可导出为 JSON 备份。</p>
+  </section>
+
   <section class="card" id="card-anc">
     <div class="card-head">
-      <div><h2>降噪 / 环境声</h2><p>NC · Ambient Sound</p></div>
+      <div><h2>降噪 / 环境声</h2><p>NC · Ambient Sound · 改动即时写入耳机</p></div>
     </div>
     <div class="segmented" id="ancseg">
       <button data-action="anc_mode" data-value="nc">降噪</button>
       <button data-action="anc_mode" data-value="ambient">环境声</button>
       <button data-action="anc_mode" data-value="off">关闭</button>
+      <button data-action="anc_mode" data-value="wind" class="wind-seg hidden" title="风噪降低是一种降噪模式；点其它胶囊即可退出">风噪</button>
     </div>
     <div class="row slider-row">
       <label>环境声等级 <b id="levelVal">0</b><span class="muted">/ 20</span></label>
-      <input type="range" min="0" max="20" step="1" id="levelRange" data-action="anc_level">
+      <input type="range" min="0" max="20" step="1" id="levelRange" data-action="anc_level"
+             aria-label="环境声等级" list="levelTicks">
+      <datalist id="levelTicks"><option value="0" label="最小"></option><option value="10"></option><option value="20" label="最大"></option></datalist>
     </div>
     <div class="row split">
-      <div><label class="lbl">关注语音</label><span class="hint">环境声下聚焦人声</span></div>
+      <div><label class="lbl">关注语音</label><button class="help" data-help="关注语音｜环境声模式下压低背景噪音、突出人声频段。仅环境声模式生效。" aria-label="关注语音说明">?</button><span class="hint">环境声下聚焦人声</span></div>
       <label class="switch"><input type="checkbox" data-action="focus" id="focusSw"><span></span></label>
-    </div>
-    <div class="row split cap-wind">
-      <div><label class="lbl">降低风噪</label><span class="hint">环境声下抑制呼啸风声</span></div>
-      <button class="btn small" data-action="wind" data-value="1">启用</button>
     </div>
   </section>
 
   <section class="card" id="card-eq">
     <div class="card-head">
-      <div><h2>均衡器</h2><p>EQ · 6 段自定义</p></div>
+      <div><h2>均衡器</h2><p>EQ · 6 段自定义 · 需点「写入自定义 EQ」</p></div>
       <span class="chip subtle" id="eqPresetLabel">—</span>
     </div>
     <div class="row eqrow">
@@ -206,6 +238,7 @@
 <section class="card" id="card-about">
     <div class="card-head">
       <div><h2>关于</h2><p>About · 版本与信息</p></div>
+    </div>
 
     <div class="aboutbody">
       <div class="aboutrow"><span class="lbl">版本</span><b id="aboutVer">—</b></div>
@@ -215,7 +248,7 @@
         <a href="https://github.com/Fanxingkeming/sony-headphones-control" target="_blank" rel="noopener">GitHub · Fanxingkeming/sony-headphones-control</a></div>
       <div class="aboutrow"><span class="lbl">日志</span>
         <button class="btn ghost small" id="btnLogExport">导出日志</button></div>
-      <p class="hint">本地运行 · 不上传任何数据 · 非官方工具，与 Sony 无关联。</p>
+      <p class="hint">本地运行 · 默认不联网，仅手动「检查更新」时访问 GitHub · 非官方工具，与 Sony 无关联。</p>
     </div>
   </section>
 
@@ -224,19 +257,22 @@
       <div><h2>原始帧日志</h2><p>最近收发的 MDR 帧（十六进制）</p></div>
       <button class="btn ghost small" id="btnLog">刷新</button>
     </div>
-    <div class="logbox" id="logbox"><div class="muted">暂无数据</div></div>
+    <details class="logmore" id="logMore">
+      <summary>展开原始帧（诊断用）</summary>
+      <div class="logbox" id="logbox"><div class="muted">暂无数据</div></div>
+    </details>
   </section>
   </div>
 
 </main>
 
 <footer class="foot">
-  本地运行 · 不上传任何数据 · 同一时刻只允许一个 tandem 客户端（请先退出手机上的 Sound Connect）
+  本地运行 · 默认不联网（仅点「检查更新」时访问 GitHub）· 同一时刻只允许一个 tandem 客户端（请先退出手机上的 Sound Connect）
 </footer>
 
 <div class="progress hidden" id="progress" aria-hidden="true"></div>
 <div class="busy hidden" id="busy"><div class="spinner"></div><span id="busyText">正在读取设备…</span></div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="/app.js"></script>
 </body>

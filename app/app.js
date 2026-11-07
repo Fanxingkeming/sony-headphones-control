@@ -142,6 +142,56 @@ const EN = {
   "检查更新": "Check for updates",
   "检查中…": "Checking…",
   "已是最新": "Up to date",
+  "未检查": "Not checked",
+  "点「检查更新」联网查询": "click Check for updates (uses GitHub)",
+  "一键场景": "Scenes",
+  "一次切换降噪、环境声与音质": "Switch noise mode, ambient and sound together",
+  "可撤销": "Undoable",
+  "保存当前为场景": "Save current as scene",
+  "撤销上一次": "Undo last change",
+  "导出配置": "Export config",
+  "导入配置": "Import config",
+  "场景会连续写入多项设置，约 2–4 秒，期间请勿操作耳机。当前设置可导出为 JSON 备份。":
+    "A scene writes several settings in a row (~2-4 s). Do not touch the headset meanwhile. Export the current setup as a JSON backup.",
+  "通勤": "Commute", "办公室": "Office", "飞机": "Flight", "居家": "Home",
+  "耳机未连接 · 设置已锁定": "Headset offline - controls locked",
+  "不再提示": "Don't show again",
+  "在 Windows 蓝牙设置里让耳机处于「已连接」":
+    "Connect the headset in Windows Bluetooth settings",
+  "完全退出手机上的 Sound Connect（同一时刻只允许一个客户端）":
+    "Quit Sound Connect on your phone completely (only one client at a time)",
+  "点右上角「↻ 刷新」重新读取状态": "Click Refresh at the top right to re-read",
+  "设备详情（协议信息）": "Device details (protocol info)",
+  "展开原始帧（诊断用）": "Show raw frames (diagnostics)",
+  "快捷键与帮助": "Shortcuts & help",
+  "最小": "Min", "最大": "Max",
+  "电量偏低，建议充电": "Low battery - charge soon",
+  "风噪": "Wind",
+  "配置已导出为 JSON": "Config exported as JSON",
+  "已导入为场景，点场景名即可应用（不会自动写入耳机）":
+    "Imported as a scene; click its name to apply (nothing is written yet)",
+
+  "NC · Ambient Sound · 改动即时写入耳机": "NC · Ambient Sound · applies immediately",
+  "System · General · 改动即时写入耳机": "System · General · applies immediately",
+  "Audio · Connection · 改动即时写入耳机": "Audio · Connection · applies immediately",
+  "EQ · 6 段自定义 · 需点「写入自定义 EQ」": "EQ · 6-band custom · press Apply custom EQ",
+  "About · 版本与信息": "About · Version & info",
+  "本地运行 · 默认不联网，仅手动「检查更新」时访问 GitHub · 非官方工具，与 Sony 无关联。":
+    "Runs locally - no network except a manual update check on GitHub. Unofficial, not affiliated with Sony.",
+  "本地运行 · 默认不联网（仅点「检查更新」时访问 GitHub）· 同一时刻只允许一个 tandem 客户端（请先退出手机上的 Sound Connect）":
+    "Runs locally - no network except a manual update check on GitHub. One tandem client at a time (quit Sound Connect on the phone).",
+  "风噪降低是一种降噪模式；点其它胶囊即可退出":
+    "Wind reduction is one noise mode; pick another pill to exit",
+  "Speak-to-Chat｜检测到你说话时自动暂停播放并放大环境声，说完恢复。":
+    "Speak-to-Chat pauses playback and opens ambient sound when you speak, then resumes.",
+  "DSEE Extreme｜把压缩音源实时升频，接近无损听感；对本地无损文件没有作用。":
+    "DSEE Extreme upscales compressed audio in real time; it does nothing for lossless files.",
+  "LDAC｜索尼的高码率蓝牙编码。Windows 只自带 SBC/AAC，需要额外发射端才可能输出 LDAC；这里显示的只是耳机侧偏好与实际协商结果。":
+    "LDAC is Sony's high-bitrate Bluetooth codec. Windows only ships SBC/AAC, so LDAC needs a separate transmitter; this row shows the headset's preference and the codec actually negotiated.",
+  "关注语音｜环境声模式下压低背景噪音、突出人声频段。仅环境声模式生效。":
+    "Focus on voice lowers background noise and lifts voices in Ambient Sound mode only.",
+  "多点连接｜耳机同时保持两台设备的连接。XM4 写入后链路会断开重连，LinkBuds S 为只读。":
+    "Multipoint keeps two devices connected at once. On XM4 a write reconnects the link; on LinkBuds S it is read-only.",
   "发现新版本": "New version available",
   "前往下载": "Download",
   "检查失败": "Check failed",
@@ -353,6 +403,13 @@ const MSG_EN = [
   [/^环境声等级 → (\d+)$/, 'Ambient level → $1'],
   [/^关注语音 → (开|关)$/, (m, v) => 'Focus on voice → ' + _onoff(v)],
   [/^已启用风噪降低$/, 'Wind noise reduction on'],
+  [/^已切换到风噪降低（点其它模式退出）$/,
+   'Wind noise reduction on (pick another mode to exit)'],
+  [/^场景已应用（(\d+) 项）$/, 'Scene applied ($1 settings)'],
+  [/^场景步骤为空或过多（最多 12 项）$/, 'Scene has no steps or too many (max 12)'],
+  [/^场景步骤格式错误$/, 'Malformed scene step'],
+  [/^场景在「(.+)」处失败：(.+)$/, 'Scene failed at $1: $2'],
+  [/^该机型不支持风噪降低$/, 'This model does not support wind noise reduction'],
 
   /* --- sound --- */
   [/^EQ 预设 → (\S+)$/, (m, v) => 'EQ preset → ' + _cap(v)],
@@ -381,6 +438,7 @@ const MSG_EN = [
 
 function tmsg(s){
   if (LANG !== 'en' || !s) return s;
+  if (EN[s]) return EN[s];
   for (const [re, rep] of MSG_EN) if (re.test(s)) return s.replace(re, rep);
   return s;
 }
@@ -789,6 +847,23 @@ async function loadStatus(fresh, silent){
   }
 }
 
+/* ---------------- offline gating ----------------
+   Nothing may look writable while the headset is gone: the old panel let
+   every switch fire and only answered with an error toast afterwards. */
+function applyOfflineState(connected){
+  const ro = !!(state && state.system && state.system.multipoint_ro);
+  $$('[data-action]').forEach(el => {
+    el.disabled = !connected || (el.id === 'multiSw' && ro);
+  });
+  ['btnEqApply', 'btnEqReset', 'btnKeys', 'btnSceneSave'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !connected;
+  });
+  const tip = $('#offlineTip');
+  if (tip) tip.classList.toggle('hidden', connected || guideDismissed());
+  setUndoButton();
+}
+
 /* ---------------- render ---------------- */
 function has(cap){ return state && state.caps.indexOf(cap) >= 0; }
 function hasVal(v){ return v !== null && v !== undefined; }
@@ -826,6 +901,7 @@ function render(){
   if (hasVal(s.battery.left)) bd.push('左 ' + s.battery.left + '%');
   if (hasVal(s.battery.right)) bd.push('右 ' + s.battery.right + '%');
   if (hasVal(s.battery.case)) bd.push('充电盒 ' + s.battery.case + '%');
+  if (bm !== null && bm < 20) bd.unshift('电量偏低，建议充电');
   $('#bat-detail').textContent = bd.join(' · ') || (v1 ? '头戴式 · 单电池' : '');
   const kv = [['型号', s.info.model], ['固件版本', s.info.firmware],
               ['当前编解码', s.info.codec]];
@@ -836,19 +912,29 @@ function render(){
     kv.push(['系列 / 颜色', s.info.series]);
   }
   kv.push(['协议', 'MDR ' + s.protocol.toUpperCase()]);
-  $('#ov-kv').innerHTML = kv.map(([k,v]) =>
+  const rowHtml = (pairs) => pairs.map(([k,v]) =>
     `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+  $('#ov-kv').innerHTML = rowHtml(kv.slice(0, 3));
+  const kvMore = $('#ov-kv-more');
+  if (kvMore) kvMore.innerHTML = rowHtml(kv.slice(3));
+  const ovMore = $('#ovMore');
+  if (ovMore) ovMore.classList.toggle('hidden', kv.length <= 3);
   $('#macInput').value = s.mac;
 
   // ANC
-  $$('#ancseg button').forEach(b =>
-    b.classList.toggle('active', b.dataset.value === s.anc.mode));
+  $$('#ancseg button').forEach(b => {
+    const on = b.dataset.value === s.anc.mode;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
   $('#levelRange').value = s.anc.level;
+  $('#levelRange').setAttribute('aria-valuetext', s.anc.level + ' / 20');
   $('#levelVal').textContent = s.anc.level;
   $('#focusSw').checked = !!s.anc.focus;
   // Wind-noise reduction only makes sense in ambient mode, so the row lives
   // with the mode instead of being a stand-alone button.
-  $('.cap-wind').classList.toggle('hidden', !(has('wind') && s.anc.mode === 'ambient'));
+  const windSeg = $('.wind-seg');
+  if (windSeg) windSeg.classList.toggle('hidden', !has('wind'));
 
   // EQ - presets as a chip row (the generic [data-action] click handler
   // dispatches them, so no extra wiring is needed).
@@ -857,6 +943,7 @@ function render(){
   const eqChips = (curPreset === 'custom' ? eqList.concat(['custom']) : eqList);
   $('#eqPreset').innerHTML = eqChips.map(k =>
     `<button type="button" class="eqchip${k === curPreset ? ' active' : ''}"` +
+    ` aria-pressed="${k === curPreset}"` +
     ` data-action="eq_preset" data-value="${k}">${esc(EQ_LABEL[k]||k)}</button>`).join('');
   $('#eqPresetLabel').textContent = EQ_LABEL[curPreset] || curPreset;
   $('#eqbands').innerHTML = s.eq.bands.map((v,i) =>
@@ -913,6 +1000,7 @@ function render(){
   $('#keyLeft').value = lk; $('#keyRight').value = rk;
 
   renderLdac();
+  applyOfflineState(!!s.connected);
 }
 
 /* ---------------- LDAC ----------------
@@ -948,11 +1036,107 @@ async function loadLdac(){
   }
 }
 
+/* ---------------- scenes ----------------
+   A scene is a batch of ordinary writes executed on one RFCOMM link, so four
+   or five related settings change together instead of one by one. Scenes are
+   plain data: built-ins live here, user scenes live in localStorage and can
+   be exported/imported as JSON. Nothing is sent to any server. */
+const SCENES_KEY = 'shcp.scenes';
+const GUIDE_KEY = 'shcp.guide';
+const BUILTIN_SCENES = [
+  {id:'commute', name:'通勤', steps:[
+    {action:'anc_mode', value:'nc'}, {action:'eq_preset', value:'bass'},
+    {action:'dsee', value:true}]},
+  {id:'office', name:'办公室', steps:[
+    {action:'anc_mode', value:'ambient'}, {action:'anc_level', value:8},
+    {action:'focus', value:true}, {action:'dsee', value:false}]},
+  {id:'flight', name:'飞机', steps:[
+    {action:'anc_mode', value:'nc'}, {action:'eq_preset', value:'vocal'},
+    {action:'dsee', value:true}, {action:'stc', value:false}]},
+  {id:'home', name:'居家', steps:[
+    {action:'anc_mode', value:'off'}, {action:'eq_preset', value:'off'},
+    {action:'dsee', value:true}]},
+];
+
+function savedScenes(){
+  try {
+    const v = JSON.parse(localStorage.getItem(SCENES_KEY) || '[]');
+    return Array.isArray(v)
+      ? v.filter(x => x && x.name && Array.isArray(x.steps)).slice(-12) : [];
+  } catch(e){ return []; }
+}
+function writeSavedScenes(list){
+  try { localStorage.setItem(SCENES_KEY, JSON.stringify(list.slice(-12))); } catch(e){}
+}
+function allScenes(){
+  return BUILTIN_SCENES.concat(savedScenes().map((x, i) =>
+    ({id:'saved' + i, name:x.name, steps:x.steps, custom:true})));
+}
+function renderScenes(){
+  const box = $('#sceneChips');
+  if (!box) return;
+  box.innerHTML = allScenes().map(sc =>
+    `<button type="button" class="eqchip scenechip" data-scene="${esc(sc.id)}" ` +
+    `aria-pressed="false">${esc(t(sc.name))}</button>`).join('');
+}
+async function applyScene(id){
+  const sc = allScenes().find(x => x.id === id);
+  if (sc) await act('scene', {name:sc.name, steps:sc.steps},
+                    '正在应用场景「' + sc.name + '」…');
+}
+
+/* Turn a status snapshot back into writes. Used by undo, "save current as
+   scene" and the config export - one representation for all three. */
+function stepsFromState(s){
+  const steps = [
+    {action:'anc_mode', value:s.anc.mode},
+    {action:'anc_level', value:s.anc.level},
+    {action:'focus', value:!!s.anc.focus},
+  ];
+  if (s.eq.preset === 'custom')
+    steps.push({action:'eq_bands', value:(s.eq.bands || []).slice(0, 6)});
+  else
+    steps.push({action:'eq_preset', value:s.eq.preset});
+  steps.push({action:'dsee', value:!!s.sound.dsee});
+  steps.push({action:'quality', value:s.sound.quality});
+  steps.push({action:'stc', value:!!s.system.stc});
+  steps.push({action:'apo', value:s.system.apo});
+  if (has('pause')) steps.push({action:'pause', value:!!s.system.pause});
+  if (has('touch')) steps.push({action:'touch', value:!!s.system.touch});
+  return steps.slice(0, 12);
+}
+
+let undoSnapshot = null;
+function setUndoButton(){
+  const b = $('#btnUndo');
+  if (b) b.disabled = !undoSnapshot || !(state && state.connected);
+}
+function guideDismissed(){
+  try { return localStorage.getItem(GUIDE_KEY) === 'off'; } catch(e){ return false; }
+}
+function syncAccentLabel(){
+  const b = $('#btnAccent');
+  if (!b) return;
+  const gold = accentMode() === 'signature';
+  b.textContent = LANG === 'en'
+    ? (gold ? 'Accent: gold' : 'Accent: auto')
+    : (gold ? '强调色：金' : '强调色：跟随');
+}
+function downloadJson(name, obj){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
 /* ---------------- actions ---------------- */
 let acting = false;
 async function act(action, value, text){
   if (acting || !state) return;
   acting = true;
+  const before = JSON.parse(JSON.stringify(state));
   busy(true, text || '正在写入并读回…');
   try {
     const j = await api('/api/action', {device, action, value});
@@ -961,6 +1145,8 @@ async function act(action, value, text){
     if (j.reconnect) {
       banner('<b>设备正在断开重连。</b> 等待约 6 秒后点右上角「↻ 刷新」读取真实状态。', false);
     }
+    undoSnapshot = before;
+    setUndoButton();
     toast(j.message || '完成');
     render();
   } catch (e) {
@@ -1003,6 +1189,90 @@ async function doSwitch(){
 }
 
 function bind(){
+  // Switch inputs are visually hidden; give screen readers the row label.
+  $$('.switch input').forEach(inp => {
+    const row = inp.closest('.row');
+    const lbl = row && row.querySelector('.lbl');
+    if (lbl && !inp.hasAttribute('aria-label'))
+      inp.setAttribute('aria-label', lbl.textContent.trim());
+  });
+  renderScenes();
+  syncAccentLabel();
+  setUndoButton();
+
+  $('#sceneChips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-scene]');
+    if (b && !b.disabled && state && state.connected) applyScene(b.dataset.scene);
+  });
+  $('#btnSceneSave').onclick = () => {
+    if (!state || !state.connected) return;
+    const name = (window.prompt('给当前设置起个场景名称',
+                  '我的场景 ' + (savedScenes().length + 1)) || '').trim();
+    if (!name) return;
+    const list = savedScenes();
+    list.push({name, steps:stepsFromState(state)});
+    writeSavedScenes(list);
+    renderScenes();
+    toast('场景「' + name + '」已保存到本机');
+  };
+  $('#btnUndo').onclick = () => {
+    if (!undoSnapshot) return;
+    const steps = stepsFromState(undoSnapshot);
+    undoSnapshot = null;
+    setUndoButton();
+    act('scene', {name:'撤销', steps}, '正在撤销上一次修改…');
+  };
+  $('#btnCfgExport').onclick = () => {
+    if (!state) return;
+    downloadJson('shcp-config-' + device + '.json', {
+      app:'sony-headphones-control',
+      version:(context && context.version) || '',
+      device, savedAt:new Date().toISOString(),
+      steps:stepsFromState(state), scenes:savedScenes(),
+    });
+    toast('配置已导出为 JSON');
+  };
+  $('#btnCfgImport').onclick = () => $('#cfgFile').click();
+  $('#cfgFile').onchange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      const list = savedScenes();
+      if (Array.isArray(j.scenes)) j.scenes.forEach(x => {
+        if (x && x.name && Array.isArray(x.steps)) list.push(x);
+      });
+      if (Array.isArray(j.steps) && j.steps.length)
+        list.push({name:'导入的配置', steps:j.steps});
+      writeSavedScenes(list);
+      renderScenes();
+      toast('已导入为场景，点场景名即可应用（不会自动写入耳机）');
+    } catch (err) {
+      toast('配置文件无法解析：' + err.message, true);
+    }
+    e.target.value = '';
+  };
+  $('#btnGuideClose').onclick = () => {
+    try { localStorage.setItem(GUIDE_KEY, 'off'); } catch(e){}
+    const tip = $('#offlineTip');
+    if (tip) tip.classList.add('hidden');
+  };
+  $('#btnHelp').onclick = () => {
+    const port = location.port || '80';
+    const drift = port !== '8765';
+    toast(LANG === 'en'
+      ? ('Shortcuts: 1/2/3 noise cancelling / ambient / off, D toggles DSEE, R re-reads | ' +
+         'Switches and dropdowns write immediately; EQ and button assignment need Apply | ' +
+         'Port ' + port + (drift ? ' (non-default; reinstall the PWA)' : ''))
+      : ('快捷键：1 / 2 / 3 切换降噪·环境声·关闭，D 切换 DSEE，R 重新读取 ｜ ' +
+         '开关与下拉即时写入，EQ 与按键分配需点「写入」 ｜ 当前端口 ' + port +
+         (drift ? '（非默认，已安装的 PWA 需重新安装）' : '')));
+  };
+  document.addEventListener('click', (e) => {
+    const h = e.target.closest('[data-help]');
+    if (h) toast(tmsg(h.dataset.help));
+  });
+
   document.addEventListener('change', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el || !state) return;
@@ -1053,6 +1323,7 @@ function bind(){
     const next = accentMode() === 'signature' ? 'auto' : 'signature';
     try { localStorage.setItem(ACCENT_KEY, next); } catch(e){}
     applyPalette();
+    syncAccentLabel();
     toast(next === 'signature'
       ? t('强调色：Sony 签名金')
       : t('强调色：跟随耳机颜色'));
@@ -1105,7 +1376,9 @@ function bind(){
     }
   }
   $('#btnCheckUpdate').onclick = checkUpdate;
-  checkUpdate();
+  // Privacy: start-up makes no external request. The user asks for a check.
+  const updEl = $('#aboutUpdate');
+  if (updEl) updEl.textContent = t('未检查') + ' · ' + t('点「检查更新」联网查询');
 
   // Export the raw-frame log as a JSON file download.
   $('#btnLogExport').onclick = async () => {
@@ -1224,9 +1497,18 @@ function bind(){
 }
 
 (async function init(){
+  document.documentElement.lang = LANG === 'en' ? 'en' : 'zh-CN';
   bind();
   watchLanguage();
   preloadPhotos();
+  if (location.port && location.port !== '8765') {
+    const hint = document.createElement('p');
+    hint.className = 'hint portwarn';
+    hint.textContent = '当前端口 ' + location.port +
+      '（非默认）。已安装的 PWA 快捷方式指向旧端口，请重新安装。';
+    const about = document.querySelector('#card-about .aboutbody');
+    if (about) about.appendChild(hint);
+  }
   loadLdac();                          // capability probe, not on the RFCOMM path
   progress(true);
   try {

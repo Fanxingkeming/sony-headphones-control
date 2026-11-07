@@ -57,7 +57,7 @@ CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 
 # Keep in sync with appmain.VERSION - the panel reads it from /api/context
 # for the About card and the update check.
-VERSION = "1.3.2"
+VERSION = "1.4.0"
 
 DEVICES = {
     "xm4": {
@@ -987,6 +987,11 @@ def demo_action(key, action, value):
                         "right": lb.KEY_PRESETS[value["right"]]}
     elif action == "stc_ext":
         sysd["stc_ext"].update(value)
+    elif action == "scene":
+        steps = value.get("steps") if isinstance(value, dict) else None
+        for step in (steps or []):
+            if isinstance(step, dict):
+                demo_action(key, step.get("action"), step.get("value"))
     return "演示模式：已更新界面（未向设备发送任何数据）"
 
 
@@ -1004,11 +1009,24 @@ def apply_action(key, c, action, value):
     reconnect = False
 
     if action == "anc_mode":
+        if value == "wind" and not v1:
+            return None, "该机型不支持风噪降低", False
         if v1:
             if value == "off":
                 p = bytes.fromhex("6802000202010000")
             elif value == "nc":
                 p = bytes.fromhex("6802110202010000")
+            elif value == "wind":
+                # Wind reduction is ASC mode 0x01, not a separate toggle.
+                # Build the SET frame from the device's own echo so the
+                # capability byte, focus and level survive the switch.
+                r = c.request(bytes.fromhex("6602"))
+                if r and len(r) >= 8:
+                    q = bytearray(r)
+                    q[0], q[2], q[4] = 0x68, 0x11, 0x01
+                    p = bytes(q)
+                else:
+                    p = bytes.fromhex("6802110201010000")
             else:
                 lv = c.request(bytes.fromhex("6602"))
                 level = lv[7] if lv and len(lv) >= 8 else 20
@@ -1020,7 +1038,8 @@ def apply_action(key, c, action, value):
             else:
                 lb.set_anc(c, mode=0x00 if value == "nc" else 0x01)
         msg = {"nc": "已切换到降噪", "ambient": "已切换到环境声",
-               "off": "已关闭降噪处理"}.get(value, "已切换")
+               "off": "已关闭降噪处理",
+               "wind": "已切换到风噪降低（点其它模式退出）"}.get(value, "已切换")
 
     elif action == "anc_level":
         lv = max(0, min(20, int(value)))
@@ -1142,6 +1161,30 @@ def apply_action(key, c, action, value):
         lb.set_stc_ext(c, sens if sens in lb.SENS else None,
                        oft if oft in lb.OFFTIME else None)
         msg = "智能对话扩展参数已写入"
+
+    elif action == "scene":
+        # A scene is a batch of ordinary writes on ONE open link. The HTTP
+        # layer reads the full status back once afterwards, instead of paying
+        # a reconnect + full read for every individual step.
+        steps = value.get("steps") if isinstance(value, dict) else None
+        if not isinstance(steps, list) or not steps or len(steps) > 12:
+            return None, "场景步骤为空或过多（最多 12 项）", False
+        allowed = {"anc_mode", "anc_level", "focus", "eq_preset", "eq_bands",
+                   "dsee", "quality", "stc", "apo", "pause", "touch", "wind"}
+        applied = []
+        for step in steps:
+            if not isinstance(step, dict):
+                return None, "场景步骤格式错误", False
+            a, v = step.get("action"), step.get("value")
+            # Skip anything that drops the link or is model-specific; a scene
+            # must never leave the headset half-configured after a disconnect.
+            if a not in allowed:
+                continue
+            ok, sub, _ = apply_action(key, c, a, v)
+            if not ok:
+                return None, "场景在「%s」处失败：%s" % (a, sub), False
+            applied.append(a)
+        msg = "场景已应用（%d 项）" % len(applied)
 
     else:
         return None, "未知操作：%s" % action, False

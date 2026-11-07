@@ -15,7 +15,7 @@ import time
 import server as srv
 import tray
 
-VERSION = "1.3.2"
+VERSION = "1.4.0"
 PREFS_NAME = "prefs.json"
 PORT_NAME = "port.json"
 
