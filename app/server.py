@@ -91,10 +91,13 @@ def load_config():
         except Exception:
             pass
     for key, dev in DEVICES.items():
-        mac = cfg.get(key, {}).get("mac")
+        # A null entry used to abort the whole loop, silently dropping the
+        # saved MAC/colour of every device that came after it.
+        entry = cfg.get(key) or {}
+        mac = entry.get("mac")
         if isinstance(mac, str) and len(mac.replace(":", "")) == 12:
             dev["mac"] = mac.upper()
-        col = cfg.get(key, {}).get("color")
+        col = entry.get("color")
         if isinstance(col, dict) and isinstance(col.get("code"), int):
             CACHED_COLOR[key] = col
     if cfg.get("last_device") in DEVICES:
@@ -501,13 +504,14 @@ def bt_candidates():
             if any(h in low for h in hints):
                 guess = key
                 break
+        row_mac = str(r.get("mac") or "")
         owner = None
         for key, dev in DEVICES.items():
-            if dev["mac"] and dev["mac"].upper() == r["mac"].upper():
+            if dev["mac"] and dev["mac"].upper() == row_mac.upper():
                 owner = key
                 break
         out.append({
-            "mac": r["mac"], "name": name,
+            "mac": row_mac, "name": name,
             "connected": bool(r.get("connected")),
             "remembered": bool(r.get("remembered")),
             "audio": ((int(r.get("cod") or 0) >> 8) & 0x1F) == AUDIO_MAJOR,
@@ -518,6 +522,15 @@ def bt_candidates():
     return {"ok": True, "available": bool(s.get("available")),
             "probe": s.get("probe", ""), "error": s.get("error", ""),
             "devices": out}
+
+
+def _reg_value(key, name):
+    """Read one registry string, or '' when the value is absent."""
+    try:
+        import winreg
+        return str(winreg.QueryValueEx(key, name)[0])
+    except (ImportError, OSError):
+        return ""
 
 
 def a2dp_bridge_status():
@@ -550,18 +563,15 @@ def a2dp_bridge_status():
                 for i in range(winreg.QueryInfoKey(k)[0]):
                     try:
                         with winreg.OpenKey(k, winreg.EnumKey(k, i)) as sub:
-                            def val(name):
-                                try:
-                                    return str(winreg.QueryValueEx(sub, name)[0])
-                                except OSError:
-                                    return ""
-                            label = val("DisplayName")
+                            label = _reg_value(sub, "DisplayName")
                             if not label or "a2dp" not in label.lower():
                                 continue
                             info["installed"] = True
-                            info["version"] = val("DisplayVersion") or info["version"]
-                            info["path"] = (val("InstallLocation")
-                                            or val("DisplayIcon") or info["path"])
+                            info["version"] = (_reg_value(sub, "DisplayVersion")
+                                               or info["version"])
+                            info["path"] = (_reg_value(sub, "InstallLocation")
+                                            or _reg_value(sub, "DisplayIcon")
+                                            or info["path"])
                     except OSError:
                         continue
         except OSError:
@@ -590,7 +600,7 @@ def _online_keys(rows):
     for key, dev in DEVICES.items():
         hit = None
         for r in rows:
-            if r.get("mac", "").upper() == dev["mac"].upper():
+            if str(r.get("mac") or "").upper() == dev["mac"].upper():
                 hit = r
                 break
         if hit is None:
@@ -611,7 +621,7 @@ def _online_keys(rows):
         if hit is None:
             continue
         found.append(key)
-        new_mac = hit.get("mac", "").upper()
+        new_mac = str(hit.get("mac") or "").upper()
         if new_mac and new_mac != dev["mac"]:
             dev["mac"] = new_mac
             save_config()
@@ -640,8 +650,8 @@ def probe_device(prefer=None, force=False, quiet=False, single=False):
         if not force and SESSION.client is not None and SESSION.key in DEVICES:
             return _set_current(SESSION.key, "connected", "会话已建立",
                                 CURRENT["online"] or list(DEVICES))
-        if quiet and not force and CURRENT["key"] and now - CURRENT["at"] < PROBE_TTL:
-            return CURRENT["key"]
+        # `quiet` used to gate a duplicate of this check. The TTL applies to
+        # every caller, so a single branch covers both paths.
         if not force and CURRENT["key"] and now - CURRENT["at"] < PROBE_TTL:
             return CURRENT["key"]
 
@@ -771,6 +781,12 @@ EQ_NAME_V2 = {v: k for k, v in lb.EQ_PRESETS.items()}
 APO_NAME_V1 = {v: k for k, v in xm4.AUTO_POWER_OFF.items()}
 
 
+def _v1_asc(c):
+    """Read the ASC state frame (66 02); None if the headset did not answer."""
+    r = c.request(bytes.fromhex("6602"))
+    return r if r and len(r) >= 8 else None
+
+
 def read_status_v1(c):
     s = empty_state("xm4")
     if CURRENT.get("model"):
@@ -785,8 +801,8 @@ def read_status_v1(c):
         v = c.request(bytes.fromhex(hexstr))
         return (v[-1] if v and len(v) >= 2 else None)
 
-    r = c.request(bytes.fromhex("6602"))
-    if r and len(r) >= 8:
+    r = _v1_asc(c)
+    if r:
         if r[2] == 0x00:
             s["anc"]["mode"] = "off"
         else:
@@ -956,13 +972,19 @@ def demo_action(key, action, value):
     if action == "anc_mode":
         a["mode"] = value
     elif action == "anc_level":
-        a["level"] = int(value)
+        try:
+            a["level"] = int(value)
+        except (TypeError, ValueError):
+            pass
     elif action == "focus":
         a["focus"] = bool(value)
     elif action == "eq_preset":
         e["preset"] = value
     elif action == "eq_bands":
-        e["bands"] = [int(x) for x in value]
+        try:
+            e["bands"] = [int(x) for x in value]
+        except (TypeError, ValueError):
+            pass
         e["preset"] = "custom"
     elif action == "dsee":
         snd["dsee"] = bool(value)
@@ -983,10 +1005,14 @@ def demo_action(key, action, value):
     elif action == "wind":
         a["mode"] = "wind"
     elif action == "keys":
-        sysd["keys"] = {"left": lb.KEY_PRESETS[value["left"]],
-                        "right": lb.KEY_PRESETS[value["right"]]}
+        if (isinstance(value, dict)
+                and value.get("left") in lb.KEY_PRESETS
+                and value.get("right") in lb.KEY_PRESETS):
+            sysd["keys"] = {"left": lb.KEY_PRESETS[value["left"]],
+                            "right": lb.KEY_PRESETS[value["right"]]}
     elif action == "stc_ext":
-        sysd["stc_ext"].update(value)
+        if isinstance(value, dict):
+            sysd["stc_ext"].update(value)
     elif action == "scene":
         steps = value.get("steps") if isinstance(value, dict) else None
         for step in (steps or []):
@@ -1020,16 +1046,16 @@ def apply_action(key, c, action, value):
                 # Wind reduction is ASC mode 0x01, not a separate toggle.
                 # Build the SET frame from the device's own echo so the
                 # capability byte, focus and level survive the switch.
-                r = c.request(bytes.fromhex("6602"))
-                if r and len(r) >= 8:
+                r = _v1_asc(c)
+                if r:
                     q = bytearray(r)
                     q[0], q[2], q[4] = 0x68, 0x11, 0x01
                     p = bytes(q)
                 else:
                     p = bytes.fromhex("6802110201010000")
             else:
-                lv = c.request(bytes.fromhex("6602"))
-                level = lv[7] if lv and len(lv) >= 8 else 20
+                lv = _v1_asc(c)
+                level = lv[7] if lv else 20
                 p = bytes([0x68, 0x02, 0x11, 0x02, 0x00, 0x01, 0x00, level])
             c.request(p)
         else:
@@ -1042,10 +1068,13 @@ def apply_action(key, c, action, value):
                "wind": "已切换到风噪降低（点其它模式退出）"}.get(value, "已切换")
 
     elif action == "anc_level":
-        lv = max(0, min(20, int(value)))
+        try:
+            lv = max(0, min(20, int(value)))
+        except (TypeError, ValueError):
+            return None, "环境声等级必须是 0-20 的数字", False
         if v1:
-            r = c.request(bytes.fromhex("6602"))
-            if r and len(r) >= 8:
+            r = _v1_asc(c)
+            if r:
                 p = bytearray(r)
                 p[0], p[7] = 0x68, lv
                 c.request(bytes(p))
@@ -1056,8 +1085,8 @@ def apply_action(key, c, action, value):
     elif action == "focus":
         on = bool(value)
         if v1:
-            r = c.request(bytes.fromhex("6602"))
-            if r and len(r) >= 8:
+            r = _v1_asc(c)
+            if r:
                 p = bytearray(r)
                 p[0], p[6] = 0x68, (1 if on else 0)
                 c.request(bytes(p))
@@ -1066,23 +1095,30 @@ def apply_action(key, c, action, value):
         msg = "关注语音 → %s" % ("开" if on else "关")
 
     elif action == "wind":
-        r = c.request(bytes.fromhex("6602"))
-        if r and len(r) >= 8:
+        r = _v1_asc(c)
+        if r:
             p = bytearray(r)
             p[0], p[2], p[4] = 0x68, 0x11, 0x01
             c.request(bytes(p))
         msg = "已启用风噪降低"
 
     elif action == "eq_preset":
+        presets = xm4.EQ_PRESETS if v1 else lb.EQ_PRESETS
+        code = presets.get(value)
+        if code is None:
+            return None, "未知 EQ 预设：%s" % value, False
         if v1:
-            c.request(bytes([0x58, 0x01, xm4.EQ_PRESETS[value], 0x00]))
+            c.request(bytes([0x58, 0x01, code, 0x00]))
         else:
-            lb.xfer(c, bytes([0x58, 0x00, lb.EQ_PRESETS[value], 0x00]))
+            lb.xfer(c, bytes([0x58, 0x00, code, 0x00]))
         time.sleep(0.5)
         msg = "EQ 预设 → %s" % value
 
     elif action == "eq_bands":
-        vals = [max(-10, min(10, int(x))) for x in value][:6]
+        try:
+            vals = [max(-10, min(10, int(x))) for x in value][:6]
+        except (TypeError, ValueError):
+            return None, "自定义 EQ 需要 6 个 -10..10 的数字", False
         if v1:
             c.request(bytes([0x58, 0x01, 0xFF, 0x06] + [v + 10 for v in vals]))
         else:
@@ -1124,6 +1160,8 @@ def apply_action(key, c, action, value):
         msg = "智能免摘 / 智能对话 → %s" % ("开" if on else "关")
 
     elif action == "apo":
+        if v1 and value not in xm4.AUTO_POWER_OFF:
+            return None, "未知自动断电档位：%s" % value, False
         if v1:
             c0, c1 = xm4.AUTO_POWER_OFF[value]
             c.request(bytes([0xF8, 0x04, 0x01, c0, c1]))
@@ -1150,6 +1188,10 @@ def apply_action(key, c, action, value):
             return None, "LinkBuds S 的多点连接是只读的，设备不接受写入", False
 
     elif action == "keys":
+        if (not isinstance(value, dict)
+                or value.get("left") not in lb.KEY_PRESETS
+                or value.get("right") not in lb.KEY_PRESETS):
+            return None, "按键分配参数不正确", False
         l = lb.KEY_PRESETS[value["left"]]
         r = lb.KEY_PRESETS[value["right"]]
         lb.set_key(c, left=l, right=r)
@@ -1269,7 +1311,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         ext = os.path.splitext(name)[1]
-        data = open(path, "rb").read()
+        with open(path, "rb") as f:
+            data = f.read()
         self.send_response(200)
         self.send_header("Content-Type", MIME.get(ext, "application/octet-stream"))
         self.send_header("Content-Length", str(len(data)))
@@ -1392,7 +1435,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": "已拒绝跨站请求"}, 403)
             return
         STATUS_CACHE["state"] = None          # a write invalidates the snapshot
-        n = int(self.headers.get("Content-Length", "0") or 0)
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n < 0:
+                raise ValueError("negative length")
+        except ValueError:
+            self._json({"ok": False, "error": "Content-Length 非法"}, 400)
+            return
         try:
             body = json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
         except Exception:

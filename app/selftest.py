@@ -465,6 +465,11 @@ def main():
         ("privacy copy matches the manual-only update check", _privacy_honest()),
         ("offline state disables writes and explains the first run", _offline_gate()),
         ("live regions and focus styles are present", _a11y_wired()),
+        ("null config entry keeps the other headset", _null_config_entry()),
+        ("invalid action values fail cleanly", _bad_action_values()),
+        ("demo mode ignores malformed values", _demo_bad_values()),
+        ("malformed Content-Length returns 400", _bad_content_length()),
+        ("v1 wind frame reuses the ASC echo", _v1_asc_action()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)
@@ -585,6 +590,103 @@ def _a11y_wired():
             and "document.documentElement.lang" in js
             and 'setAttribute(\'aria-label\', lbl.textContent.trim())' in js
             and ":focus-visible" in css)
+
+
+def _null_config_entry():
+    """A null device entry must not hide the other headset's saved MAC."""
+    import json as _json
+    import tempfile
+    d = tempfile.mkdtemp()
+    path = os.path.join(d, "config.json")
+    with open(path, "w", encoding="utf-8") as f:
+        _json.dump({"xm4": None,
+                    "ls900n": {"mac": "AA:BB:CC:DD:EE:01"}}, f)
+    orig_path = srv.CONFIG_PATH
+    orig_macs = {k: v["mac"] for k, v in srv.DEVICES.items()}
+    orig_cache = dict(srv.CACHED_COLOR)
+    orig_last = srv.LAST_DEVICE
+    try:
+        srv.CONFIG_PATH = path
+        srv.load_config()
+        return srv.DEVICES["ls900n"]["mac"] == "AA:BB:CC:DD:EE:01"
+    except Exception:
+        return False
+    finally:
+        srv.CONFIG_PATH = orig_path
+        for k, mac in orig_macs.items():
+            srv.DEVICES[k]["mac"] = mac
+        srv.CACHED_COLOR.clear()
+        srv.CACHED_COLOR.update(orig_cache)
+        srv.LAST_DEVICE = orig_last
+
+
+def _bad_action_values():
+    """Invalid values return a clear error instead of raising KeyError."""
+    class NoWrite:
+        def request(self, *a, **k):
+            raise AssertionError("no write should reach the device")
+
+    cases = [("anc_level", "abc"), ("eq_preset", "no-such-preset"),
+             ("eq_bands", ["x"] * 6), ("apo", "no-such-apo"),
+             ("keys", "not-a-dict")]
+    for action, value in cases:
+        ok, msg, _ = srv.apply_action("xm4", NoWrite(), action, value)
+        if ok or not msg:
+            return False
+    return True
+
+
+def _demo_bad_values():
+    """Demo mode ignores malformed values instead of crashing the handler."""
+    import copy as _copy
+    before = _copy.deepcopy(srv.DEMO["xm4"])
+    try:
+        for action, value in [("anc_level", "abc"),
+                              ("eq_bands", ["x"] * 6),
+                              ("keys", "not-a-dict"),
+                              ("stc_ext", "not-a-dict")]:
+            srv.demo_action("xm4", action, value)
+        return True
+    except Exception:
+        return False
+    finally:
+        srv.DEMO["xm4"] = before
+
+
+def _bad_content_length():
+    """A malformed Content-Length yields 400, not a dead handler thread."""
+    class Fake:
+        path = "/api/action"
+
+        def __init__(self, headers):
+            self.headers = headers
+            self.server = type("S", (), {"server_port": 8765})()
+            self.result = None
+
+        def _json(self, obj, code=200):
+            self.result = (obj, code)
+
+    fake = Fake({"Content-Length": "abc"})
+    srv.Handler.do_POST(fake)
+    return bool(fake.result and fake.result[1] == 400
+                and not fake.result[0].get("ok"))
+
+
+def _v1_asc_action():
+    """Wind mode builds its frame from the ASC echo, preserving level bytes."""
+    sent = []
+
+    class Echo:
+        def request(self, payload, *a, **k):
+            b = bytes(payload)
+            if b == b"\x66\x02":
+                return bytes.fromhex("67 02 11 02 02 01 01 0c")
+            sent.append(b)
+            return b
+
+    ok, _, _ = srv.apply_action("xm4", Echo(), "anc_mode", "wind")
+    return (ok and len(sent) == 1 and sent[0][0] == 0x68
+            and sent[0][4] == 0x01 and sent[0][7] == 0x0c)
 
 
 if __name__ == "__main__":

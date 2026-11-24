@@ -138,11 +138,20 @@ class App:
             return None
 
     def save_prefs(self):
+        # Atomic replace, same as server.save_config: a crash mid-write must
+        # not leave truncated JSON that resets the saved menu/font choice.
+        tmp = self.prefs_path + ".tmp"
         try:
-            with open(self.prefs_path, "w", encoding="utf-8") as f:
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self.prefs, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, self.prefs_path)
         except OSError:
-            pass
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
     def url(self, switch=False):
         # The browser asks /api/context which headset is connected; the URL
