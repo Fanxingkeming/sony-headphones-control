@@ -577,18 +577,21 @@ class Tray:
 
     def _dispatch(self, cmd):
         c = self.cb
-        st = c.get("get_state", lambda: {})()
         if cmd == ID_OPEN:
             c.get("on_open", lambda: None)()
         elif cmd == ID_SWITCH:
             c.get("on_switch", lambda: None)()
         elif cmd == ID_AUTOSTART:
+            # Only the two commands that read state pay for get_state();
+            # it hits the registry through appmain.state().
+            st = c.get("get_state", lambda: {})()
             c.get("on_autostart", lambda v: None)(not st.get("autostart"))
         elif cmd == ID_DISCONNECT:
             c.get("on_disconnect", lambda: None)()
         elif cmd == ID_ABOUT:
             c.get("on_about", lambda: None)()
         elif cmd == ID_FONT:
+            st = c.get("get_state", lambda: {})()
             cur = int(st.get("menu_px") or 13)
             nxt = FONT_STEPS[(FONT_STEPS.index(cur) + 1) % len(FONT_STEPS)] \
                 if cur in FONT_STEPS else FONT_STEPS[1]
@@ -626,7 +629,6 @@ class Tray:
             (0 if level > 20 else 1 if level >= 10 else 2)
         if stage == getattr(self, "_battery_stage", object()):
             return
-        self._battery_stage = stage
         try:
             hicon = make_badged_icon(stage)
         except Exception:
@@ -641,6 +643,9 @@ class Tray:
         if getattr(self, "hicon", None):
             _DestroyIcon(self.hicon)
         self.hicon = hicon
+        # Commit only after the icon is ready: a failed build must not latch
+        # the stage and suppress every later retry for the same level.
+        self._battery_stage = stage
 
     def balloon(self, title, text):
         if self.nid is None:                  # called before run(): defer it

@@ -59,6 +59,8 @@ def rfcomm_streams(recs):
             ln = p[i] >> 1
             i += 1
         else:
+            if i + 1 >= len(p):
+                continue
             ln = (p[i] >> 1) | (p[i + 1] << 7)
             i += 2
         streams["out" if ctrl == 0xEF else "in"] += p[i:i + ln]
@@ -83,13 +85,15 @@ def split_frames(buf):
 
 def parse_frame(f):
     """返回 dict 或 None（长度/校验不符时返回 None）"""
-    if len(f) < 8 or f[0] != START or f[-1] != END:
+    if len(f) < 9 or f[0] != START or f[-1] != END:
         return None
     dtype, seq = f[1], f[2]
     prefix = f[3:6]                      # 三个保留字节
     length = f[6]
     payload = f[7:7 + length]
-    if len(payload) != length:
+    # The checksum byte must sit between the payload and END, otherwise a
+    # truncated frame is parsed with END (0x3C) mistaken for the checksum.
+    if len(payload) != length or 8 + length >= len(f):
         return None
     checksum = f[7 + length]
     calc = sum(f[1:7 + length]) & 0xFF
@@ -122,7 +126,7 @@ def main():
             rows.append("\t".join([
                 direction, p["type_name"], f"0x{p['type']:02x}", f"seq={p['seq']}",
                 f"len={p['length']}", f"ck={'OK' if p['checksum_ok'] else 'BAD'}",
-                p["payload"], f.raw.hex() if hasattr(f, "raw") else f.hex(),
+                p["payload"], f.hex(),
             ]))
 
     open(os.path.join(outdir, "frames.tsv"), "w", encoding="utf-8").write("\n".join(rows))

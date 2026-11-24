@@ -180,7 +180,8 @@ def scan(force=False):
     with _lock:
         now = time.monotonic()
         if not force and _cache["result"] is not None and now - _cache["at"] < CACHE_TTL:
-            return _cache["result"]
+            # Callers may add fields; never hand out the cached object itself.
+            return dict(_cache["result"])
 
         a = _load()
         if a is None:
@@ -202,7 +203,7 @@ def scan(force=False):
                         r["verified"] = True
                 result = {"available": True,
                           "probe": "connected" if any(r["connected"] for r in rows) else "idle",
-                          "devices": rows, "error": "" if not rows else "",
+                          "devices": rows, "error": "",
                           "enumerate_error": err, "radio": bool(radio)}
                 if not rows and err not in (0, 259, 1168):
                     result["error"] = "BluetoothFindFirstDevice 错误 %d" % err
@@ -212,7 +213,7 @@ def scan(force=False):
 
         result["at"] = time.strftime("%H:%M:%S")
         _cache["result"], _cache["at"] = result, now
-        return result
+        return dict(result)
 
 
 def connected_map(force=False):

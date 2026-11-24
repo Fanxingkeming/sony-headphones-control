@@ -17,6 +17,8 @@ import server as srv          # noqa: E402
 import tandem_client as tc    # noqa: E402
 import linkbuds as lb         # noqa: E402
 import tray                   # noqa: E402
+import tandem_frames as tf     # noqa: E402
+import bt_presence as bt_mod   # noqa: E402
 
 V1 = {
     b"\x10\x00": bytes.fromhex("11 00 44 00"),
@@ -470,6 +472,11 @@ def main():
         ("demo mode ignores malformed values", _demo_bad_values()),
         ("malformed Content-Length returns 400", _bad_content_length()),
         ("v1 wind frame reuses the ASC echo", _v1_asc_action()),
+        ("truncated frames are rejected safely", _parse_frame_bounds()),
+        ("short RFCOMM length field is skipped", _rfcomm_bounds()),
+        ("battery stage retries after icon failure", _battery_stage_retry()),
+        ("scan cache is isolated from callers", _scan_cache_isolated()),
+        ("dispatch reads state only when needed", _dispatch_lazy_state()),
     ]
     for name, ok in checks:
         print(("  PASS  " if ok else "  FAIL  ") + name)
@@ -687,6 +694,88 @@ def _v1_asc_action():
     ok, _, _ = srv.apply_action("xm4", Echo(), "anc_mode", "wind")
     return (ok and len(sent) == 1 and sent[0][0] == 0x68
             and sent[0][4] == 0x01 and sent[0][7] == 0x0c)
+
+
+def _parse_frame_bounds():
+    """Truncated frames must return None, never raise or parse END as checksum."""
+    cases = ["3e 00 00 00 00 00 01 3c",     # length=1, no checksum byte
+             "3e 00 00 00 00 00 00 3c",     # checksum slot is END itself
+             "3e 01 02 00 00 00 01 11 3c"]  # checksum missing before END
+    for h in cases:
+        try:
+            if tf.parse_frame(bytes.fromhex(h)) is not None:
+                return False
+        except IndexError:
+            return False
+    minimum = tf.parse_frame(bytes.fromhex("3e 01 02 00 00 00 00 03 3c"))
+    d = tf.parse_frame(bytes.fromhex("3e 01 02 00 00 00 02 11 22 38 3c"))
+    return (minimum is not None and minimum["payload"] == ""
+            and d is not None and d["payload"] == "1122"
+            and d["checksum"] == 0x38 and d["checksum_ok"] is True)
+
+
+def _rfcomm_bounds():
+    """A short UIH length field must be skipped, not indexed past the buffer."""
+    import struct
+    p = bytes([0x00, 0xEF, 0x02])
+    l2 = struct.pack("<HH", 3, 0x0047) + p
+    pkt = bytes([0x02, 0x00, 0x00]) + struct.pack("<H", len(l2)) + l2
+    # RFCOMM two-byte length: (p[2]>>1) | (p[3]<<7) = 1, so p[3]=0 and
+    # the single payload byte lives at p[4].
+    good = bytes([0x00, 0xEF, 0x02, 0x00, 0x11])
+    good_l2 = struct.pack("<HH", 5, 0x0047) + good
+    good_pkt = bytes([0x02, 0x00, 0x00]) + struct.pack("<H", len(good_l2)) + good_l2
+    try:
+        bad_result = dict(tf.rfcomm_streams([(0, 0, pkt)]))
+        good_result = dict(tf.rfcomm_streams([(0, 0, good_pkt)]))
+        return (bad_result == {}
+                and bytes(good_result.get("out", b"")) == b"\x11")
+    except IndexError:
+        return False
+
+
+def _battery_stage_retry():
+    """A failed icon build must not latch the stage and block later retries."""
+    orig = tray.make_badged_icon
+    calls = []
+
+    def fake(stage):
+        calls.append(stage)
+        return object()          # a non-null icon handle
+
+    try:
+        t = tray.Tray({"get_state": lambda: {}})
+        t._battery_stage = None
+        tray.make_badged_icon = lambda stage: calls.append(stage) or None
+        t.set_battery(5)
+        t.set_battery(5)                        # failed twice -> retry allowed
+        retried = len(calls) == 2
+
+        calls.clear()
+        t2 = tray.Tray({"get_state": lambda: {}})
+        t2._battery_stage = None
+        tray.make_badged_icon = fake
+        t2.set_battery(5)
+        t2.set_battery(5)                       # success -> de-duped, one call
+        return retried and len(calls) == 1 and t2._battery_stage == 2
+    finally:
+        tray.make_badged_icon = orig
+
+
+def _scan_cache_isolated():
+    """Callers must not be able to mutate the cached scan result."""
+    r = bt_mod.scan(force=True)
+    r["probe"] = "TAMPERED"
+    return bt_mod.scan()["probe"] != "TAMPERED"
+
+
+def _dispatch_lazy_state():
+    """Commands that never read state must not trigger get_state (registry I/O)."""
+    seen = []
+    t = tray.Tray({"get_state": lambda: seen.append("state") or {},
+                   "on_open": lambda: seen.append("open")})
+    t._dispatch(tray.ID_OPEN)
+    return seen == ["open"]
 
 
 if __name__ == "__main__":
